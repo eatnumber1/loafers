@@ -1,0 +1,11 @@
+Important
+	Error checking
+
+Wishlist
+	SOCKS4a
+	SOCKS4
+	SOCKS5
+		CMD_UDP
+		CMD_BIND
+		METHOD_GSSAPI
+		METHOD_USERPASS
