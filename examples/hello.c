@@ -26,6 +26,12 @@ int main() {
 		perror("socket");
 		exit(EXIT_FAILURE);
 	}
+	
+	if( connect(sock, res->ai_addr, res->ai_addrlen) != 0 ) {
+		perror("connect");
+		exit(EXIT_FAILURE);
+	}
+	freeaddrinfo(res);
 
 	struct shoes_conn_t *conn = shoes_alloc();
 	shoes_set_version(conn, SOCKS_VERSION_5);
@@ -33,9 +39,8 @@ int main() {
 	shoes_set_methods(conn, methods, sizeof(methods));
 	shoes_set_command(conn, SOCKS_CMD_CONNECT);
 	shoes_set_hostname(conn, "localhost", 1337);
-	shoes_connect(conn, sock, res->ai_addr, res->ai_addrlen);
+	shoes_handshake(conn, sock);
 	shoes_free(conn);
-	freeaddrinfo(res);
 
 	FILE *s = fdopen(sock, "a+");
 	fprintf(s, "Hello World!\n");

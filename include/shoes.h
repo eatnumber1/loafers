@@ -25,4 +25,7 @@ bool shoes_set_methods( struct shoes_conn_t *conn, const socks_method_e *methods
 bool shoes_set_command( struct shoes_conn_t *conn, socks_cmd_e cmd );
 bool shoes_set_hostname( struct shoes_conn_t *conn, const char *hostname, in_port_t port );
 bool shoes_set_sockaddr( struct shoes_conn_t *conn, const struct sockaddr *address );
-int shoes_connect( const struct shoes_conn_t *conn, int socket, const struct sockaddr *proxyaddr, socklen_t proxyaddr_len );
+bool shoes_handshake_f( struct shoes_conn_t *conn, FILE *sock );
+bool shoes_handshake( struct shoes_conn_t *conn, int socket );
+
+//int shoes_connect( const struct shoes_conn_t *conn, int socket, const struct sockaddr *proxyaddr, socklen_t proxyaddr_len );

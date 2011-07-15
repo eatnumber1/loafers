@@ -226,10 +226,7 @@ static shoes_rc_e shoes_pack_request( PackStream *stream, const socks_request_t 
 	return SHOES_ERR_NOERR;
 }
 
-int shoes_connect( const struct shoes_conn_t *conn, int socket, const struct sockaddr *proxyaddr, socklen_t proxyaddr_len ) {
-	int sockfd = dup(socket);
-	connect(sockfd, proxyaddr, proxyaddr_len);
-	FILE *sock = fdopen(sockfd, "a+");
+bool shoes_handshake_f( struct shoes_conn_t *conn, FILE *sock ) {
 	PackStream *stream = packstream_file_new(sock);
 
 	shoes_pack_version(stream, &conn->ver);
@@ -245,6 +242,22 @@ int shoes_connect( const struct shoes_conn_t *conn, int socket, const struct soc
 	talloc_free(reply);
 
 	packstream_file_free(stream);
+	
+	return true;
+}
+
+bool shoes_handshake( struct shoes_conn_t *conn, int socket ) {
+	int sockfd = dup(socket);
+	FILE *sock = fdopen(sockfd, "a+");
+	shoes_handshake_f(conn, sock);
 	fclose(sock);
+	return true;
+}
+
+#if 0
+int shoes_connect( const struct shoes_conn_t *conn, int socket, const struct sockaddr *proxyaddr, socklen_t proxyaddr_len ) {
+	connect(sock, proxyaddr, proxyaddr_len);
+	shoes_handshake(conn, sock);
 	return 0;
 }
+#endif
