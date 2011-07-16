@@ -23,5 +23,10 @@ AC_TYPE_UINT8_T
 AC_FUNC_MALLOC
 AC_CHECK_FUNCS([bzero dup2 socket strdup])
 
+PKG_CHECK_MODULES([libpack], [libpack >= 0.3],
+	[AC_DEFINE([HAVE_LIBPACK], [1], [Use libpack])],
+	[AC_MSG_ERROR([libpack is required])
+])
+
 AC_CONFIG_FILES([Makefile shoes.pc])
 AC_OUTPUT

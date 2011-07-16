@@ -5,7 +5,7 @@ includedir=@includedir@
 
 Name: shoes
 Description: A SOCKS client library
-Requires: libpack >= 0.3
+Requires:
 Version: @PACKAGE_VERSION@
 Libs: -L${libdir} -lshoes
 Cflags: -I${includedir}
