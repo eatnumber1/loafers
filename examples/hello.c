@@ -1,12 +1,12 @@
-#import <strings.h>
-#import <sys/types.h>
-#import <sys/socket.h>
-#import <netdb.h>
-#import <stdio.h>
-#import <stdlib.h>
-#import <stdbool.h>
+#include <strings.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netdb.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdbool.h>
 
-#import <shoes.h>
+#include <shoes.h>
 
 int main( int argc, char *argv[] ) {
 	if( argc != 5 ) {
@@ -20,9 +20,9 @@ int main( int argc, char *argv[] ) {
 	hints.ai_socktype = SOCK_STREAM;
 	hints.ai_protocol = IPPROTO_TCP;
 	struct addrinfo *res;
-	int rc = getaddrinfo(argv[1], argv[2], &hints, &res);
-	if( rc != 0 ) {
-		fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rc));
+	int retcode = getaddrinfo(argv[1], argv[2], &hints, &res);
+	if( retcode != 0 ) {
+		fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(retcode));
 		exit(EXIT_FAILURE);
 	}
 
@@ -38,16 +38,46 @@ int main( int argc, char *argv[] ) {
 	}
 	freeaddrinfo(res);
 
-	struct shoes_conn_t *conn = shoes_alloc();
-	shoes_set_version(conn, SOCKS_VERSION_5);
+	struct shoes_conn_t *conn;
+	shoes_rc_e rc;
+	if( (rc = shoes_alloc(&conn)) != SHOES_ERR_NOERR ) {
+		shoes_free(conn);
+		fprintf(stderr, "shoes_alloc: %s\n", shoes_strerror(rc));
+		exit(EXIT_FAILURE);
+	}
+	if( (rc = shoes_set_version(conn, SOCKS_VERSION_5)) != SHOES_ERR_NOERR ) {
+		shoes_free(conn);
+		fprintf(stderr, "shoes_set_version: %s\n", shoes_strerror(rc));
+		exit(EXIT_FAILURE);
+	}
 	socks_method_e methods[] = { SOCKS_METHOD_NONE };
-	shoes_set_methods(conn, methods, sizeof(methods));
-	shoes_set_command(conn, SOCKS_CMD_CONNECT);
-	shoes_set_hostname(conn, argv[3], atoi(argv[4]));
-	shoes_handshake(conn, sock);
+	if( (rc = shoes_set_methods(conn, methods, sizeof(methods))) != SHOES_ERR_NOERR ) {
+		shoes_free(conn);
+		fprintf(stderr, "shoes_set_methods: %s\n", shoes_strerror(rc));
+		exit(EXIT_FAILURE);
+	}
+	if( (rc = shoes_set_command(conn, SOCKS_CMD_CONNECT)) != SHOES_ERR_NOERR ) {
+		shoes_free(conn);
+		fprintf(stderr, "shoes_set_command: %s\n", shoes_strerror(rc));
+		exit(EXIT_FAILURE);
+	}
+	if( (rc = shoes_set_hostname(conn, argv[3], atoi(argv[4]))) != SHOES_ERR_NOERR ) {
+		shoes_free(conn);
+		fprintf(stderr, "shoes_set_hostname: %s\n", shoes_strerror(rc));
+		exit(EXIT_FAILURE);
+	}
+	if( (rc = shoes_handshake(conn, sock)) != SHOES_ERR_NOERR ) {
+		shoes_free(conn);
+		fprintf(stderr, "shoes_handshake: %s\n", shoes_strerror(rc));
+		exit(EXIT_FAILURE);
+	}
 	shoes_free(conn);
 
 	FILE *s = fdopen(sock, "a+");
+	if( s == NULL ) {
+		perror("fdopen");
+		exit(EXIT_FAILURE);
+	}
 	fprintf(s, "Hello World!\n");
 	fclose(s);
 }
