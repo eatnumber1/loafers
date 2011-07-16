@@ -29,6 +29,4 @@ bool shoes_set_sockaddr( struct shoes_conn_t *conn, const struct sockaddr *addre
 bool shoes_handshake_f( struct shoes_conn_t *conn, FILE *sock );
 bool shoes_handshake( struct shoes_conn_t *conn, int socket );
 
-//int shoes_connect( const struct shoes_conn_t *conn, int socket, const struct sockaddr *proxyaddr, socklen_t proxyaddr_len );
-
 #endif

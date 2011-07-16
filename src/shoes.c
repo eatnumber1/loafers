@@ -267,11 +267,3 @@ bool shoes_handshake( struct shoes_conn_t *conn, int socket ) {
 	fclose(sock);
 	return true;
 }
-
-#if 0
-int shoes_connect( const struct shoes_conn_t *conn, int socket, const struct sockaddr *proxyaddr, socklen_t proxyaddr_len ) {
-	connect(sock, proxyaddr, proxyaddr_len);
-	shoes_handshake(conn, sock);
-	return 0;
-}
-#endif
