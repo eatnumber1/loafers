@@ -1,6 +1,5 @@
 *.o
 *.dylib
 *.dSYM/
-examples/hello
 \.*\.swp
 *.so

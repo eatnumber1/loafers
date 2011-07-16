@@ -6,9 +6,6 @@ CPPFLAGS := -Iinclude
 LDFLAGS :=
 CFLAGS := -fshort-enums -std=gnu99 -Wall -Wextra -Werror -ggdb -fPIC
 
-CPPFLAGS += $(shell pkg-config --cflags talloc)
-LDFLAGS += $(shell pkg-config --libs talloc)
-
 CPPFLAGS += $(shell pkg-config --cflags libpack)
 LDFLAGS += $(shell pkg-config --libs libpack)
 
@@ -20,7 +17,7 @@ OBJECTS := $(SOURCES:.c=.o)
 all: libshoes.so
 
 clean:
-	$(RM) $(OBJECTS) libshoes.so examples/hello examples/hello.o
+	$(RM) $(OBJECTS) libshoes.so examples/hello examples/hello.o examples/sockscat examples/sockscat.o
 
 examples: examples/hello examples/sockscat
 

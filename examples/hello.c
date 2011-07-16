@@ -4,12 +4,13 @@
 #import <netdb.h>
 #import <stdio.h>
 #import <stdlib.h>
+#import <stdbool.h>
 
-#import "shoes.h"
+#import <shoes.h>
 
 int main( int argc, char *argv[] ) {
-	if( argc != 3 ) {
-		fprintf(stderr, "Usage: %s hostname port\n", argv[0]);
+	if( argc != 5 ) {
+		fprintf(stderr, "Usage: %s shostname sport hostname port\n", argv[0]);
 		exit(EXIT_FAILURE);
 	}
 
@@ -19,7 +20,6 @@ int main( int argc, char *argv[] ) {
 	hints.ai_socktype = SOCK_STREAM;
 	hints.ai_protocol = IPPROTO_TCP;
 	struct addrinfo *res;
-	//"173.255.236.218"
 	int rc = getaddrinfo(argv[1], argv[2], &hints, &res);
 	if( rc != 0 ) {
 		fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rc));
@@ -43,7 +43,7 @@ int main( int argc, char *argv[] ) {
 	socks_method_e methods[] = { SOCKS_METHOD_NONE };
 	shoes_set_methods(conn, methods, sizeof(methods));
 	shoes_set_command(conn, SOCKS_CMD_CONNECT);
-	shoes_set_hostname(conn, "localhost", 1337);
+	shoes_set_hostname(conn, argv[3], atoi(argv[4]));
 	shoes_handshake(conn, sock);
 	shoes_free(conn);
 

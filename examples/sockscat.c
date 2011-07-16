@@ -5,8 +5,9 @@
 #import <stdio.h>
 #import <stdlib.h>
 #import <unistd.h>
+#import <stdbool.h>
 
-#import "shoes.h"
+#import <shoes.h>
 
 int main( int argc, char *argv[] ) {
 	if( argc != 5 ) {
@@ -20,7 +21,6 @@ int main( int argc, char *argv[] ) {
 	hints.ai_socktype = SOCK_STREAM;
 	hints.ai_protocol = IPPROTO_TCP;
 	struct addrinfo *res;
-	//"173.255.236.218"
 	int rc = getaddrinfo(argv[1], argv[2], &hints, &res);
 	if( rc != 0 ) {
 		fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rc));

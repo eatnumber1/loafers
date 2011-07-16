@@ -18,7 +18,6 @@
 #import <errno.h>
 #import <netdb.h>
 
-#import <talloc.h>
 #import <libpack.h>
 
 #import "shoes.h"
@@ -64,7 +63,7 @@ typedef struct {
 	socks_reply_e rep;
 	socks_atyp_e atyp;
 	in_port_t bnd_port;
-	socks_addr_u *bnd_addr;
+	socks_addr_u bnd_addr;
 } socks_reply_t;
 
 typedef enum {
@@ -77,13 +76,31 @@ struct shoes_conn_t {
 };
 
 struct shoes_conn_t *shoes_alloc() {
-	struct shoes_conn_t *conn = talloc(NULL, struct shoes_conn_t);
+	struct shoes_conn_t *conn = malloc(sizeof(struct shoes_conn_t));
 	if( conn == NULL ) return NULL;
 	return conn;
 }
 
-bool shoes_free( struct shoes_conn_t *conn ) {
-	return talloc_free(conn) == 0;
+static void shoes_free_addr_u( socks_addr_u addr, socks_atyp_e atyp ) {
+	switch( atyp ) {
+		case SOCKS_ATYP_IPV6:
+			free(addr.ip6);
+			break;
+		case SOCKS_ATYP_IPV4:
+			free(addr.ip4);
+			break;
+		case SOCKS_ATYP_HOSTNAME:
+			free(addr.hostname);
+			break;
+		default:
+			assert(false);
+	}
+}
+
+void shoes_free( struct shoes_conn_t *conn ) {
+	free(conn->ver.methods);
+	shoes_free_addr_u(conn->req.dst_addr, conn->req.atyp);
+	free(conn);
 }
 
 bool shoes_set_version( struct shoes_conn_t *conn, socks_version_e version ) {
@@ -93,7 +110,7 @@ bool shoes_set_version( struct shoes_conn_t *conn, socks_version_e version ) {
 }
 
 bool shoes_set_methods( struct shoes_conn_t *conn, const socks_method_e *methods, uint8_t nmethods ) {
-	conn->ver.methods = talloc_array(conn, socks_method_e, nmethods);
+	conn->ver.methods = calloc(sizeof(socks_method_e), nmethods);
 	if( conn->ver.methods == NULL ) return false;
 	memcpy(conn->ver.methods, methods, nmethods * sizeof(socks_method_e));
 	conn->ver.nmethods = nmethods;
@@ -113,7 +130,7 @@ static bool shoes_set_atyp( struct shoes_conn_t *conn, socks_atyp_e atyp ) {
 bool shoes_set_hostname( struct shoes_conn_t *conn, const char *hostname, in_port_t port ) {
 	if( !shoes_set_atyp(conn, SOCKS_ATYP_HOSTNAME) ) return false;
 	conn->req.dst_port = port;
-	conn->req.dst_addr.hostname = talloc_strdup(conn, hostname);
+	conn->req.dst_addr.hostname = strdup(hostname);
 	return conn->req.dst_addr.hostname != NULL;
 }
 
@@ -124,7 +141,7 @@ bool shoes_set_sockaddr( struct shoes_conn_t *conn, const struct sockaddr *addre
 			if( !shoes_set_atyp(conn, SOCKS_ATYP_IPV4) ) return false;
 			struct sockaddr_in *addr = (struct sockaddr_in *) address;
 			req->dst_port = addr->sin_port;
-			req->dst_addr.ip4 = talloc(conn, struct in_addr);
+			req->dst_addr.ip4 = malloc(sizeof(struct in_addr));
 			if( req->dst_addr.ip4 == NULL ) return false;
 			memcpy(req->dst_addr.ip4, &addr->sin_addr, sizeof(struct in_addr));
 			break;
@@ -132,7 +149,7 @@ bool shoes_set_sockaddr( struct shoes_conn_t *conn, const struct sockaddr *addre
 			if( !shoes_set_atyp(conn, SOCKS_ATYP_IPV6) ) return false;
 			struct sockaddr_in6 *addr6 = (struct sockaddr_in6 *) address;
 			req->dst_port = addr6->sin6_port;
-			req->dst_addr.ip6 = talloc(conn, struct in6_addr);
+			req->dst_addr.ip6 = malloc(sizeof(struct in6_addr));
 			if( req->dst_addr.ip6 == NULL ) return false;
 			memcpy(req->dst_addr.ip6, &addr6->sin6_addr, sizeof(struct in_addr));
 			break;
@@ -148,51 +165,45 @@ static shoes_rc_e shoes_pack_version( PackStream *stream, const socks_version_t 
 	return SHOES_ERR_NOERR;
 }
 
-static shoes_rc_e shoes_unpack_addr( PackStream *stream, const socks_atyp_e atyp, socks_addr_u **address, size_t *addrsize ) {
-	socks_addr_u *addr = talloc(NULL, socks_addr_u);
+static shoes_rc_e shoes_unpack_addr( PackStream *stream, const socks_atyp_e atyp, socks_addr_u *addr ) {
 	size_t count;
 	switch( atyp ) {
 		case SOCKS_ATYP_IPV6:
-			addr->ip6 = talloc(addr, struct in6_addr);
+			addr->ip6 = malloc(sizeof(struct in6_addr));
 			unpack(stream, "u8>[16]", &addr->ip6->s6_addr);
 			count = 16;
 			break;
 		case SOCKS_ATYP_IPV4:
-			addr->ip4 = talloc(addr, struct in_addr);
+			addr->ip4 = malloc(sizeof(struct in_addr));
 			unpack(stream, "u32>", &addr->ip4->s_addr);
 			count = 4;
 			break;
 		case SOCKS_ATYP_HOSTNAME:
 			unpack(stream, "u8>", &count);
-			addr->hostname = talloc_array(addr, char, count + 1);
+			addr->hostname = calloc(sizeof(char), count + 1);
 			unpack(stream, "u8>[]", addr->hostname, count);
 			addr->hostname[count++] = '\0';
 			break;
 		default:
 			assert(false);
 	}
-	*address = addr;
-	*addrsize = count;
 	return SHOES_ERR_NOERR;
 }
 
 static shoes_rc_e shoes_unpack_reply( PackStream *stream, socks_reply_t **rep ) {
-	socks_reply_t *reply = talloc(NULL, socks_reply_t);
+	socks_reply_t *reply = malloc(sizeof(socks_reply_t));
 	uint8_t rsv;
 	unpack(stream, "u8>4", &reply->ver, &reply->rep, &rsv, &reply->atyp);
 	assert(reply->ver == SOCKS_VERSION_5);
 	assert(reply->rep == SOCKS_REPLY_SUCCESS);
-	socks_addr_u *addr;
-	size_t addrsize;
-	shoes_unpack_addr(stream, reply->atyp, &addr, &addrsize);
-	reply->bnd_addr = talloc_steal(reply, addr);
+	shoes_unpack_addr(stream, reply->atyp, &reply->bnd_addr);
 	unpack(stream, "u16>", &reply->bnd_port);
 	*rep = reply;
 	return SHOES_ERR_NOERR;
 }
 
 static shoes_rc_e shoes_unpack_methodsel( PackStream *stream, socks_methodsel_t **methodsel ) {
-	socks_methodsel_t *m = talloc(NULL, socks_methodsel_t);
+	socks_methodsel_t *m = malloc(sizeof(socks_methodsel_t));
 	unpack(stream, "u8>2", &m->ver, &m->method);
 	assert(m->ver == SOCKS_VERSION_5);
 	assert(m->method == SOCKS_METHOD_NONE);
@@ -234,14 +245,15 @@ bool shoes_handshake_f( struct shoes_conn_t *conn, FILE *sock ) {
 
 	socks_methodsel_t *methodsel;
 	shoes_unpack_methodsel(stream, &methodsel);
-	talloc_free(methodsel);
+	free(methodsel);
 
 	shoes_pack_request(stream, &conn->req);
 	fflush(sock);
 	
 	socks_reply_t *reply;
 	shoes_unpack_reply(stream, &reply);
-	talloc_free(reply);
+	shoes_free_addr_u(reply->bnd_addr, reply->atyp);
+	free(reply);
 
 	packstream_file_free(stream);
 	
