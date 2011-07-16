@@ -1,26 +1,28 @@
 // TODO: Optimize the includes.
 
-#import <stdio.h>
-#import <stdlib.h>
-#import <string.h>
-#import <inttypes.h>
-#import <arpa/inet.h>
-#import <strings.h>
-#import <unistd.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <inttypes.h>
+#include <arpa/inet.h>
+#include <strings.h>
+#include <unistd.h>
 
-#import <stdint.h>
+#include <stdint.h>
 
-#import <sys/types.h>
-#import <sys/socket.h>
-#import <assert.h>
-#import <stdbool.h>
-#import <limits.h>
-#import <errno.h>
-#import <netdb.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <assert.h>
+#include <stdbool.h>
+#include <limits.h>
+#include <errno.h>
+#include <netdb.h>
 
-#import <libpack.h>
+#include <libpack.h>
 
-#import "shoes.h"
+#include "shoes.h"
+
+#include "config.h"
 
 typedef enum {
 	SOCKS_ATYP_IPV4 = 0x01,
