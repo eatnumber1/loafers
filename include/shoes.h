@@ -1,3 +1,6 @@
+#ifndef SHOES_H
+#define SHOES_H
+
 #import <stdbool.h>
 
 typedef enum {
@@ -29,3 +32,5 @@ bool shoes_handshake_f( struct shoes_conn_t *conn, FILE *sock );
 bool shoes_handshake( struct shoes_conn_t *conn, int socket );
 
 //int shoes_connect( const struct shoes_conn_t *conn, int socket, const struct sockaddr *proxyaddr, socklen_t proxyaddr_len );
+
+#endif
