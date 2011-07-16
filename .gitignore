@@ -3,3 +3,4 @@
 *.dSYM/
 examples/hello
 \.*\.swp
+*.so

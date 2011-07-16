@@ -1,26 +1,28 @@
 # TODO: Better Makefile
 
-CC := llvm-gcc
+CC := llvm-gcc-4.2
 
-CPPFLAGS := -Iinclude -I/Users/russ/Downloads/libpack-0.3/install/include
-LDFLAGS := -L/Users/russ/Downloads/libpack-0.3/install/lib -lpack
-CFLAGS := -fshort-enums -std=gnu99 -Wall -Wextra -Werror -ggdb
+CPPFLAGS := -Iinclude
+LDFLAGS :=
+CFLAGS := -fshort-enums -std=gnu99 -Wall -Wextra -Werror -ggdb -fPIC
 
 CPPFLAGS += $(shell pkg-config --cflags talloc)
 LDFLAGS += $(shell pkg-config --libs talloc)
+
+CPPFLAGS += $(shell pkg-config --cflags libpack)
+LDFLAGS += $(shell pkg-config --libs libpack)
 
 SOURCES := src/shoes.c
 OBJECTS := $(SOURCES:.c=.o)
 
 .PHONY: all clean examples
 
-all: libshoes.dylib
+all: libshoes.so
 
 clean:
-	$(RM) $(OBJECTS) libshoes.dylib examples/hello examples/hello.o
-	$(RM) -r libshoes.dylib.dSYM
+	$(RM) $(OBJECTS) libshoes.so examples/hello examples/hello.o
 
-examples: examples/hello
+examples: examples/hello examples/sockscat
 
 examples/hello: examples/hello.o
 	$(CC) $(CFLAGS) -Wl,-rpath,$(PWD) -L$(PWD) -lshoes -o $@ $<
@@ -28,7 +30,13 @@ examples/hello: examples/hello.o
 examples/hello.o: examples/hello.c include/shoes.h
 	$(CC) -c -Iinclude $(CFLAGS) -o $@ $<
 
-libshoes.dylib: $(OBJECTS)
+examples/sockscat: examples/sockscat.o
+	$(CC) $(CFLAGS) -Wl,-rpath,$(PWD) -L$(PWD) -lshoes -o $@ $<
+
+examples/sockscat.o: examples/sockscat.c include/shoes.h
+	$(CC) -c -Iinclude $(CFLAGS) -o $@ $<
+
+libshoes.so: $(OBJECTS)
 	$(CC) -shared $(CFLAGS) $(LDFLAGS) -o $@ $<
 
 src/shoes.o: include/shoes.h src/shoes.c

@@ -4,12 +4,13 @@
 #import <netdb.h>
 #import <stdio.h>
 #import <stdlib.h>
+#import <unistd.h>
 
 #import "shoes.h"
 
 int main( int argc, char *argv[] ) {
-	if( argc != 3 ) {
-		fprintf(stderr, "Usage: %s hostname port\n", argv[0]);
+	if( argc != 5 ) {
+		fprintf(stderr, "Usage: %s shostname sport hostname port\n", argv[0]);
 		exit(EXIT_FAILURE);
 	}
 
@@ -43,11 +44,20 @@ int main( int argc, char *argv[] ) {
 	socks_method_e methods[] = { SOCKS_METHOD_NONE };
 	shoes_set_methods(conn, methods, sizeof(methods));
 	shoes_set_command(conn, SOCKS_CMD_CONNECT);
-	shoes_set_hostname(conn, "localhost", 1337);
+	shoes_set_hostname(conn, argv[3], atoi(argv[4]));
 	shoes_handshake(conn, sock);
 	shoes_free(conn);
 
-	FILE *s = fdopen(sock, "a+");
-	fprintf(s, "Hello World!\n");
-	fclose(s);
+	char *args[] = { "cat", NULL };
+	if( fork() == 0 ) {
+		close(0);
+		dup2(sock, 0);
+		close(sock);
+		execvp(args[0], args);
+	} else {
+		close(1);
+		dup2(sock, 1);
+		close(sock);
+		execvp(args[0], args);
+	}
 }

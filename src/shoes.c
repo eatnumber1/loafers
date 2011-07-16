@@ -210,7 +210,7 @@ static shoes_rc_e shoes_pack_addr( PackStream *stream, const socks_atyp_e atyp, 
 			pack(stream, "u32>", addr->ip4->s_addr);
 			break;
 		case SOCKS_ATYP_HOSTNAME:
-			addr_len = strlen((char *) addr);
+			addr_len = strlen(addr->hostname);
 			pack(stream, "u8> u8>[]", addr_len, addr->hostname, addr_len);
 			break;
 		default:
@@ -230,12 +230,14 @@ bool shoes_handshake_f( struct shoes_conn_t *conn, FILE *sock ) {
 	PackStream *stream = packstream_file_new(sock);
 
 	shoes_pack_version(stream, &conn->ver);
+	fflush(sock);
 
 	socks_methodsel_t *methodsel;
 	shoes_unpack_methodsel(stream, &methodsel);
 	talloc_free(methodsel);
 
 	shoes_pack_request(stream, &conn->req);
+	fflush(sock);
 	
 	socks_reply_t *reply;
 	shoes_unpack_reply(stream, &reply);
