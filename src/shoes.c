@@ -399,17 +399,14 @@ shoes_rc_e shoes_handshake( struct shoes_conn_t *conn, struct shoes_connstate_t 
 				for( int i = 0; i < ver->nmethods; i++ )
 					buf[i + 2] = ver->methods[i];
 				connstate->state = SHOES_CONN_VERSION_SENDING;
-				break;
 			}
 			case SHOES_CONN_VERSION_SENDING: {
 				if( (rc = shoes_write(sockfd, connstate)) != SHOES_ERR_NOERR ) return rc;
 				connstate->state = SHOES_CONN_METHODSEL_PREPARE;
-				break;
 			}
 			case SHOES_CONN_METHODSEL_PREPARE: {
 				if( (rc = shoes_connbuf_alloc(connstate, 2 * sizeof(uint8_t))) != SHOES_ERR_NOERR ) return rc;
 				connstate->state = SHOES_CONN_METHODSEL_READING;
-				break;
 			}
 			case SHOES_CONN_METHODSEL_READING: {
 				if( (rc = shoes_read(sockfd, connstate)) != SHOES_ERR_NOERR ) return rc;
@@ -418,7 +415,6 @@ shoes_rc_e shoes_handshake( struct shoes_conn_t *conn, struct shoes_connstate_t 
 					return SHOES_ERR_BADPACKET;
 				}
 				connstate->state = SHOES_CONN_REQUEST_PREPARE;
-				break;
 			}
 			case SHOES_CONN_REQUEST_PREPARE: {
 				socks_request_t *req = &conn->req;
@@ -449,18 +445,15 @@ shoes_rc_e shoes_handshake( struct shoes_conn_t *conn, struct shoes_connstate_t 
 				bufptr += addrsiz;
 				memcpy(bufptr, &req->dst_port, sizeof(uint16_t));
 				connstate->state = SHOES_CONN_REQUEST_SENDING;
-				break;
 			}
 			case SHOES_CONN_REQUEST_SENDING: {
 				if( (rc = shoes_write(sockfd, connstate)) != SHOES_ERR_NOERR ) return rc;
 				connstate->state = SHOES_CONN_REPLY_HEADER_PREPARE;
-				break;
 			}
 			case SHOES_CONN_REPLY_HEADER_PREPARE: {
 				if( (rc = shoes_connbuf_alloc(connstate, 4 * sizeof(uint8_t))) != SHOES_ERR_NOERR ) return rc;
 				if( (connstate->data = realloc(connstate->data, sizeof(uint8_t))) == NULL ) return SHOES_ERR_ERRNO;
 				connstate->state = SHOES_CONN_REPLY_HEADER_READING;
-				break;
 			}
 			case SHOES_CONN_REPLY_HEADER_READING: {
 				if( (rc = shoes_read(sockfd, connstate)) != SHOES_ERR_NOERR ) return rc;
@@ -494,18 +487,15 @@ shoes_rc_e shoes_handshake( struct shoes_conn_t *conn, struct shoes_connstate_t 
 			case SHOES_CONN_REPLY_HEADER_HOSTLEN_PREPARE: {
 				if( (rc = shoes_connbuf_alloc(connstate, sizeof(uint8_t))) != SHOES_ERR_NOERR ) return rc;
 				connstate->state = SHOES_CONN_REPLY_HEADER_HOSTLEN_READING;
-				break;
 			}
 			case SHOES_CONN_REPLY_HEADER_HOSTLEN_READING: {
 				if( (rc = shoes_read(sockfd, connstate)) != SHOES_ERR_NOERR ) return rc;
 				*((uint8_t *) connstate->data) = connstate->buf[0];
 				connstate->state = SHOES_CONN_REPLY_PREPARE;
-				break;
 			}
 			case SHOES_CONN_REPLY_PREPARE: {
 				if( (rc = shoes_connbuf_alloc(connstate, *((uint8_t *) connstate->data) + sizeof(uint16_t))) != SHOES_ERR_NOERR ) return rc;
 				connstate->state = SHOES_CONN_REPLY_READING;
-				break;
 			}
 			case SHOES_CONN_REPLY_READING: {
 				if( (rc = shoes_read(sockfd, connstate)) != SHOES_ERR_NOERR ) return rc;
