@@ -4,8 +4,10 @@
 #include <netdb.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
 #include <stdbool.h>
+#include <fcntl.h>
+#include <errno.h>
+#include <sys/select.h>
 
 #include <shoes.h>
 
@@ -32,17 +34,29 @@ int main( int argc, char *argv[] ) {
 		perror("socket");
 		exit(EXIT_FAILURE);
 	}
-	
+
 	if( connect(sock, res->ai_addr, res->ai_addrlen) != 0 ) {
 		perror("connect");
 		exit(EXIT_FAILURE);
 	}
 	freeaddrinfo(res);
 
+	int flags = fcntl(sock, F_GETFL);
+	if( flags == -1 ) {
+		perror("fcntl");
+		exit(EXIT_FAILURE);
+	}
+
+	if( fcntl(sock, F_SETFL, flags | O_NONBLOCK) == -1 ) {
+		perror("fcntl");
+		exit(EXIT_FAILURE);
+	}
+
 	struct shoes_conn_t *conn;
 	shoes_rc_e rc;
 	if( (rc = shoes_conn_alloc(&conn)) != SHOES_ERR_NOERR ) {
 		fprintf(stderr, "shoes_alloc: %s\n", shoes_strerror(rc));
+		shoes_conn_free(conn);
 		exit(EXIT_FAILURE);
 	}
 	if( (rc = shoes_set_version(conn, SOCKS_VERSION_5)) != SHOES_ERR_NOERR ) {
@@ -51,7 +65,7 @@ int main( int argc, char *argv[] ) {
 		exit(EXIT_FAILURE);
 	}
 	socks_method_e methods[] = { SOCKS_METHOD_NONE };
-	if( (rc = shoes_set_methods(conn, methods, sizeof(methods))) != SHOES_ERR_NOERR ) {
+	if( (rc = shoes_set_methods(conn, methods, 1)) != SHOES_ERR_NOERR ) {
 		fprintf(stderr, "shoes_set_methods: %s\n", shoes_strerror(rc));
 		shoes_conn_free(conn);
 		exit(EXIT_FAILURE);
@@ -66,40 +80,64 @@ int main( int argc, char *argv[] ) {
 		shoes_conn_free(conn);
 		exit(EXIT_FAILURE);
 	}
-	if( (rc = shoes_handshake(conn, NULL, sock)) != SHOES_ERR_NOERR ) {
-		fprintf(stderr, "shoes_handshake: %s\n", shoes_strerror(rc));
+	struct shoes_connstate_t *connstate;
+	if( (rc = shoes_connstate_alloc(&connstate)) != SHOES_ERR_NOERR ) {
+		fprintf(stderr, "shoes_connstate_alloc: %s\n", shoes_strerror(rc));
 		shoes_conn_free(conn);
 		exit(EXIT_FAILURE);
 	}
+
+	fd_set rfds, wfds;
+	FD_ZERO(&rfds);
+	FD_ZERO(&wfds);
+	FD_SET(sock, &rfds);
+	FD_SET(sock, &wfds);
+	while( true ) {
+		if( (rc = shoes_handshake(conn, connstate, sock)) != SHOES_ERR_NOERR ) {
+			if( rc != SHOES_ERR_ERRNO || ( errno != EAGAIN && errno != EWOULDBLOCK ) ) {
+				fprintf(stderr, "shoes_handshake: %s\n", shoes_strerror(rc));
+				shoes_connstate_free(connstate);
+				shoes_conn_free(conn);
+				exit(EXIT_FAILURE);
+			}
+		}
+		if( shoes_is_connected(connstate) ) {
+			break;
+		} else {
+			if( shoes_needs_write(connstate) ) {
+				if( select(sock + 1, NULL, &wfds, NULL, NULL) == -1 ) {
+					perror("select");
+					exit(EXIT_FAILURE);
+				}
+			} else if( shoes_needs_read(connstate) ) {
+				if( select(sock + 1, &rfds, NULL, NULL, NULL) == -1 ) {
+					perror("select");
+					exit(EXIT_FAILURE);
+				}
+			} else {
+				fprintf(stderr, "Handshake needs neither read nor write\n");
+				exit(EXIT_FAILURE);
+			}
+		}
+	}
+
 	if( (rc = shoes_conn_free(conn)) != SHOES_ERR_NOERR ) {
 		fprintf(stderr, "shoes_conn_free: %s\n", shoes_strerror(rc));
+		shoes_connstate_free(connstate);
+		exit(EXIT_FAILURE);
+	}
+	if( (rc = shoes_connstate_free(connstate)) != SHOES_ERR_NOERR ) {
+		fprintf(stderr, "shoes_connstate_free: %s\n", shoes_strerror(rc));
+		shoes_conn_free(conn);
 		exit(EXIT_FAILURE);
 	}
 
-	char *args[] = { "cat", NULL };
-	pid_t pid = fork();
-	if( pid == -1 ) {
-		perror("fork");
-		exit(EXIT_FAILURE);
-	} else if( pid == 0 ) {
-		close(0);
-		if( dup2(sock, 0) == -1 ) {
-			perror("dup2");
-			exit(EXIT_FAILURE);
-		}
-		close(sock);
-		execvp(args[0], args);
-		perror("execvp");
-		exit(EXIT_FAILURE);
-	} else {
-		close(1);
-		if( dup2(sock, 1) == -1 ) {
-			perror("dup2");
-			exit(EXIT_FAILURE);
-		}
-		close(sock);
-		execvp(args[0], args);
-		perror("execvp");
+	FILE *s = fdopen(sock, "a+");
+	if( s == NULL ) {
+		perror("fdopen");
 		exit(EXIT_FAILURE);
 	}
+	fprintf(s, "Hello World!\n");
+	fclose(s);
+	return EXIT_SUCCESS;
 }

@@ -40,38 +40,40 @@ int main( int argc, char *argv[] ) {
 
 	struct shoes_conn_t *conn;
 	shoes_rc_e rc;
-	if( (rc = shoes_alloc(&conn)) != SHOES_ERR_NOERR ) {
-		shoes_free(conn);
+	if( (rc = shoes_conn_alloc(&conn)) != SHOES_ERR_NOERR ) {
 		fprintf(stderr, "shoes_alloc: %s\n", shoes_strerror(rc));
 		exit(EXIT_FAILURE);
 	}
 	if( (rc = shoes_set_version(conn, SOCKS_VERSION_5)) != SHOES_ERR_NOERR ) {
-		shoes_free(conn);
 		fprintf(stderr, "shoes_set_version: %s\n", shoes_strerror(rc));
+		shoes_conn_free(conn);
 		exit(EXIT_FAILURE);
 	}
 	socks_method_e methods[] = { SOCKS_METHOD_NONE };
-	if( (rc = shoes_set_methods(conn, methods, sizeof(methods))) != SHOES_ERR_NOERR ) {
-		shoes_free(conn);
+	if( (rc = shoes_set_methods(conn, methods, 1)) != SHOES_ERR_NOERR ) {
 		fprintf(stderr, "shoes_set_methods: %s\n", shoes_strerror(rc));
+		shoes_conn_free(conn);
 		exit(EXIT_FAILURE);
 	}
 	if( (rc = shoes_set_command(conn, SOCKS_CMD_CONNECT)) != SHOES_ERR_NOERR ) {
-		shoes_free(conn);
 		fprintf(stderr, "shoes_set_command: %s\n", shoes_strerror(rc));
+		shoes_conn_free(conn);
 		exit(EXIT_FAILURE);
 	}
-	if( (rc = shoes_set_hostname(conn, argv[3], atoi(argv[4]))) != SHOES_ERR_NOERR ) {
-		shoes_free(conn);
+	if( (rc = shoes_set_hostname(conn, argv[3], htons(atoi(argv[4])))) != SHOES_ERR_NOERR ) {
 		fprintf(stderr, "shoes_set_hostname: %s\n", shoes_strerror(rc));
+		shoes_conn_free(conn);
 		exit(EXIT_FAILURE);
 	}
-	if( (rc = shoes_handshake(conn, sock)) != SHOES_ERR_NOERR ) {
-		shoes_free(conn);
+	if( (rc = shoes_handshake(conn, NULL, sock)) != SHOES_ERR_NOERR ) {
 		fprintf(stderr, "shoes_handshake: %s\n", shoes_strerror(rc));
+		shoes_conn_free(conn);
 		exit(EXIT_FAILURE);
 	}
-	shoes_free(conn);
+	if( (rc = shoes_conn_free(conn)) != SHOES_ERR_NOERR ) {
+		fprintf(stderr, "shoes_conn_free: %s\n", shoes_strerror(rc));
+		exit(EXIT_FAILURE);
+	}
 
 	FILE *s = fdopen(sock, "a+");
 	if( s == NULL ) {
@@ -80,4 +82,5 @@ int main( int argc, char *argv[] ) {
 	}
 	fprintf(s, "Hello World!\n");
 	fclose(s);
+	return EXIT_SUCCESS;
 }

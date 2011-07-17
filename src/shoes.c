@@ -5,7 +5,6 @@
 #include <inttypes.h>
 #include <arpa/inet.h>
 #include <strings.h>
-#include <unistd.h>
 
 #include <stdint.h>
 
@@ -19,8 +18,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <assert.h>
-
-#include <libpack.h>
+#include <unistd.h>
 
 #include "shoes.h"
 
@@ -56,6 +54,7 @@ typedef struct {
 	socks_atyp_e atyp;
 	in_port_t dst_port;
 	socks_addr_u dst_addr;
+	size_t addrsiz;
 } socks_request_t;
 
 typedef struct {
@@ -66,9 +65,35 @@ typedef struct {
 	socks_addr_u bnd_addr;
 } socks_reply_t;
 
+typedef enum {
+	SHOES_CONN_VERSION_PREPARE,
+	SHOES_CONN_VERSION_SENDING,
+	SHOES_CONN_METHODSEL_PREPARE,
+	SHOES_CONN_METHODSEL_READING,
+	SHOES_CONN_REQUEST_PREPARE,
+	SHOES_CONN_REQUEST_SENDING,
+	SHOES_CONN_REPLY_HEADER_PREPARE,
+	SHOES_CONN_REPLY_HEADER_READING,
+	SHOES_CONN_REPLY_HEADER_HOSTLEN_PREPARE,
+	SHOES_CONN_REPLY_HEADER_HOSTLEN_READING,
+	SHOES_CONN_REPLY_PREPARE,
+	SHOES_CONN_REPLY_READING,
+	SHOES_CONN_CONNECTED,
+	SHOES_CONN_INVALID
+} shoes_connstate_e;
+
 struct shoes_conn_t {
 	socks_version_t ver;
 	socks_request_t req;
+	size_t addrsiz;
+};
+
+struct shoes_connstate_t {
+	shoes_connstate_e state;
+	uint8_t *buf, *bufptr;
+	size_t bufremain;
+	// For passing information between states.
+	void *data;
 };
 
 const char *shoes_strerror( shoes_rc_e err ) {
@@ -86,14 +111,13 @@ const char *shoes_strerror( shoes_rc_e err ) {
 		[SHOES_ERR_CMDNOTSUP] = "Command not supported",
 		[SHOES_ERR_AFNOTSUP] = "Address type not supported",
 		[SHOES_ERR_BADPACKET] = "Bad packet",
-		[SHOES_ERR_NOTIMPL] = "Not implemented"
 	};
 	static const size_t noerrors = sizeof(errors) / sizeof(char *);
 	if( err >= noerrors ) return "Unknown error";
 	return errors[err];
 }
 
-shoes_rc_e shoes_alloc( struct shoes_conn_t **conn ) {
+shoes_rc_e shoes_conn_alloc( struct shoes_conn_t **conn ) {
 	if( conn == NULL ) {
 		errno = EINVAL;
 		return SHOES_ERR_ERRNO;
@@ -105,7 +129,7 @@ shoes_rc_e shoes_alloc( struct shoes_conn_t **conn ) {
 	return SHOES_ERR_NOERR;
 }
 
-static void shoes_free_addr_u( socks_addr_u addr, socks_atyp_e atyp ) {
+static shoes_rc_e shoes_free_addr_u( socks_atyp_e atyp, socks_addr_u addr ) {
 	switch( atyp ) {
 		case SOCKS_ATYP_UNINIT:
 			break;
@@ -119,15 +143,24 @@ static void shoes_free_addr_u( socks_addr_u addr, socks_atyp_e atyp ) {
 			if( addr.hostname != NULL ) free(addr.hostname);
 			break;
 		default:
-			assert(false);
+			errno = EINVAL;
+			return SHOES_ERR_ERRNO;
 	}
+	return SHOES_ERR_NOERR;
 }
 
-void shoes_free( struct shoes_conn_t *conn ) {
-	if( conn == NULL ) return;
+shoes_rc_e shoes_conn_free( struct shoes_conn_t *conn ) {
+	if( conn == NULL ) {
+		errno = EINVAL;
+		return SHOES_ERR_ERRNO;
+	}
 	if( conn->ver.methods != NULL ) free(conn->ver.methods);
-	shoes_free_addr_u(conn->req.dst_addr, conn->req.atyp);
+	shoes_rc_e rc = shoes_free_addr_u(conn->req.atyp, conn->req.dst_addr);
+	int err = 0;
+	if( rc != SHOES_ERR_NOERR ) err = errno;
 	free(conn);
+	errno = err;
+	return rc;
 }
 
 shoes_rc_e shoes_set_version( struct shoes_conn_t *conn, socks_version_e version ) {
@@ -182,12 +215,16 @@ shoes_rc_e shoes_set_hostname( struct shoes_conn_t *conn, const char *hostname, 
 		return SHOES_ERR_ERRNO;
 	}
 
+	socks_request_t *req = &conn->req;
 	shoes_rc_e rc = shoes_set_atyp(conn, SOCKS_ATYP_HOSTNAME);
 	if( rc != SHOES_ERR_NOERR ) return rc;
-	conn->req.dst_port = port;
-	if( conn->req.dst_addr.hostname != NULL ) free(conn->req.dst_addr.hostname);
-	conn->req.dst_addr.hostname = strdup(hostname);
-	return conn->req.dst_addr.hostname == NULL ? SHOES_ERR_ERRNO : SHOES_ERR_NOERR;
+	req->dst_port = port;
+	if( req->dst_addr.hostname != NULL ) free(req->dst_addr.hostname);
+	req->addrsiz = (strlen(hostname) + 1) * sizeof(char);
+	req->dst_addr.hostname = malloc(req->addrsiz);
+	if( req->dst_addr.hostname == NULL ) return SHOES_ERR_ERRNO;
+	memcpy(req->dst_addr.hostname, hostname, req->addrsiz);
+	return SHOES_ERR_NOERR;
 }
 
 shoes_rc_e shoes_set_sockaddr( struct shoes_conn_t *conn, const struct sockaddr *address ) {
@@ -203,7 +240,8 @@ shoes_rc_e shoes_set_sockaddr( struct shoes_conn_t *conn, const struct sockaddr 
 			struct sockaddr_in *addr = (struct sockaddr_in *) address;
 			req->dst_port = addr->sin_port;
 			if( req->dst_addr.ip4 != NULL ) free(req->dst_addr.ip4);
-			req->dst_addr.ip4 = malloc(sizeof(struct in_addr));
+			req->addrsiz = sizeof(struct in_addr);
+			req->dst_addr.ip4 = malloc(req->addrsiz);
 			if( req->dst_addr.ip4 == NULL ) return SHOES_ERR_ERRNO;
 			memcpy(req->dst_addr.ip4, &addr->sin_addr, sizeof(struct in_addr));
 			break;
@@ -212,7 +250,8 @@ shoes_rc_e shoes_set_sockaddr( struct shoes_conn_t *conn, const struct sockaddr 
 			struct sockaddr_in6 *addr6 = (struct sockaddr_in6 *) address;
 			req->dst_port = addr6->sin6_port;
 			if( req->dst_addr.ip6 != NULL ) free(req->dst_addr.ip6);
-			req->dst_addr.ip6 = malloc(sizeof(struct in6_addr));
+			req->addrsiz = sizeof(struct in6_addr);
+			req->dst_addr.ip6 = malloc(req->addrsiz);
 			if( req->dst_addr.ip6 == NULL ) return SHOES_ERR_ERRNO;
 			memcpy(req->dst_addr.ip6, &addr6->sin6_addr, sizeof(struct in_addr));
 			break;
@@ -223,216 +262,262 @@ shoes_rc_e shoes_set_sockaddr( struct shoes_conn_t *conn, const struct sockaddr 
 	return SHOES_ERR_NOERR;
 }
 
-static shoes_rc_e shoes_pack_version( PackStream *stream, const socks_version_t *ver ) {
-	if( stream == NULL || ver == NULL ) {
-		errno = EINVAL;
-		return SHOES_ERR_ERRNO;
-	}
-
-	return pack(stream, "u8> u8>[u8>]", ver->ver, ver->methods, ver->nmethods) == -1 ? SHOES_ERR_ERRNO : SHOES_ERR_NOERR;
+bool shoes_is_connected( struct shoes_connstate_t *connstate ) {
+	assert(connstate != NULL);
+	return connstate->state == SHOES_CONN_CONNECTED;
 }
 
-static shoes_rc_e shoes_unpack_addr( PackStream *stream, const socks_atyp_e atyp, socks_addr_u *addr ) {
-	if( stream == NULL || addr == NULL ) {
+bool shoes_needs_write( struct shoes_connstate_t *connstate ) {
+	assert(connstate != NULL);
+	return connstate->state == SHOES_CONN_VERSION_PREPARE ||
+		connstate->state == SHOES_CONN_VERSION_SENDING ||
+		connstate->state == SHOES_CONN_REQUEST_PREPARE ||
+		connstate->state == SHOES_CONN_REQUEST_SENDING;
+}
+
+bool shoes_needs_read( struct shoes_connstate_t *connstate ) {
+	assert(connstate != NULL);
+	return connstate->state == SHOES_CONN_METHODSEL_PREPARE ||
+		connstate->state == SHOES_CONN_METHODSEL_READING ||
+		connstate->state == SHOES_CONN_REPLY_HEADER_PREPARE ||
+		connstate->state == SHOES_CONN_REPLY_HEADER_READING ||
+		connstate->state == SHOES_CONN_REPLY_HEADER_HOSTLEN_PREPARE ||
+		connstate->state == SHOES_CONN_REPLY_HEADER_HOSTLEN_READING ||
+		connstate->state == SHOES_CONN_REPLY_PREPARE ||
+		connstate->state == SHOES_CONN_REPLY_READING;
+}
+
+shoes_rc_e shoes_connstate_alloc( struct shoes_connstate_t **connstate ) {
+	if( connstate == NULL ) {
 		errno = EINVAL;
 		return SHOES_ERR_ERRNO;
 	}
-
-	size_t count;
-	switch( atyp ) {
-		case SOCKS_ATYP_IPV6:
-			if( addr->ip6 != NULL ) free(addr->ip6);
-			addr->ip6 = malloc(sizeof(struct in6_addr));
-			if( addr->ip6 == NULL ) return SHOES_ERR_ERRNO;
-			if( unpack(stream, "u8>[16]", &addr->ip6->s6_addr) == -1 ) {
-				free(addr->ip6);
-				addr->ip6 = NULL;
-				return SHOES_ERR_ERRNO;
-			}
-			count = 16;
-			break;
-		case SOCKS_ATYP_IPV4:
-			if( addr->ip4 != NULL ) free(addr->ip4);
-			addr->ip4 = malloc(sizeof(struct in_addr));
-			if( addr->ip4 == NULL ) return SHOES_ERR_ERRNO;
-			if( unpack(stream, "u32>", &addr->ip4->s_addr) == -1 ) {
-				free(addr->ip4);
-				addr->ip4 = NULL;
-				return SHOES_ERR_ERRNO;
-			}
-			count = 4;
-			break;
-		case SOCKS_ATYP_HOSTNAME:
-			unpack(stream, "u8>", &count);
-			if( addr->hostname != NULL ) free(addr->hostname);
-			addr->hostname = calloc(sizeof(char), count + 1);
-			if( addr->hostname == NULL ) return SHOES_ERR_ERRNO;
-			if( unpack(stream, "u8>[]", addr->hostname, count) == -1 ) {
-				free(addr->hostname);
-				addr->hostname = NULL;
-				return SHOES_ERR_ERRNO;
-			}
-			addr->hostname[count] = '\0';
-			break;
-		default:
-			errno = EINVAL;
-			return SHOES_ERR_ERRNO;
-	}
+	*connstate = malloc(sizeof(struct shoes_connstate_t));
+	if( *connstate == NULL ) return SHOES_ERR_ERRNO;
+	bzero(*connstate, sizeof(struct shoes_connstate_t));
+	(*connstate)->state = SHOES_CONN_VERSION_PREPARE;
 	return SHOES_ERR_NOERR;
 }
 
-static shoes_rc_e shoes_unpack_reply( PackStream *stream, socks_reply_t **rep ) {
-	if( stream == NULL || rep == NULL ) {
+shoes_rc_e shoes_connstate_free( struct shoes_connstate_t *connstate ) {
+	if( connstate == NULL ) {
 		errno = EINVAL;
 		return SHOES_ERR_ERRNO;
 	}
-
-	socks_reply_t *reply = malloc(sizeof(socks_reply_t));
-	bzero(reply, sizeof(socks_reply_t));
-	if( reply == NULL ) return SHOES_ERR_ERRNO;
-	uint8_t rsv;
-	if( unpack(stream, "u8>4", &reply->ver, &reply->rep, &rsv, &reply->atyp) == -1 ) {
-		free(reply);
-		return SHOES_ERR_ERRNO;
-	}
-	if( reply->ver != SOCKS_VERSION_5 ) {
-		free(reply);
-		return SHOES_ERR_BADPACKET;
-	}
-	if( reply->rep != SHOES_ERR_NOERR ) {
-		shoes_rc_e ret = reply->rep;
-		free(reply);
-		return ret;
-	}
-	shoes_rc_e rc = shoes_unpack_addr(stream, reply->atyp, &reply->bnd_addr);
-	if( rc != SHOES_ERR_NOERR ) {
-		free(reply);
-		return rc;
-	}
-	if( unpack(stream, "u16>", &reply->bnd_port) == -1 ) {
-		free(reply);
-		return SHOES_ERR_ERRNO;
-	}
-	*rep = reply;
+	if( connstate->buf != NULL ) free(connstate->buf);
+	if( connstate->data != NULL ) free(connstate->data);
+	free(connstate);
 	return SHOES_ERR_NOERR;
 }
 
-static shoes_rc_e shoes_unpack_methodsel( PackStream *stream, socks_methodsel_t **methodsel ) {
-	if( stream == NULL || methodsel == NULL ) {
-		errno = EINVAL;
-		return SHOES_ERR_ERRNO;
-	}
-
-	socks_methodsel_t *m = malloc(sizeof(socks_methodsel_t));
-	if( m == NULL ) return SHOES_ERR_ERRNO;
-	if( unpack(stream, "u8>2", &m->ver, &m->method) == -1 ) {
-		free(m);
-		return SHOES_ERR_ERRNO;
-	}
-	if( m->ver != SOCKS_VERSION_5 ) {
-		free(m);
-		return SHOES_ERR_BADPACKET;
-	}
-	// TODO: Implement more auth methods
-	if( m->method != SOCKS_METHOD_NONE ) {
-		free(m);
-		return SHOES_ERR_NOTIMPL;
-	}
-	*methodsel = m;
+static shoes_rc_e shoes_connbuf_alloc( struct shoes_connstate_t *connstate, size_t count ) {
+	size_t bufsiz = count * sizeof(uint8_t);
+	uint8_t *buf = realloc(connstate->buf, bufsiz);
+	if( buf == NULL ) return SHOES_ERR_NOERR;
+	connstate->buf = buf;
+	connstate->bufptr = buf;
+	connstate->bufremain = bufsiz;
 	return SHOES_ERR_NOERR;
 }
 
-static shoes_rc_e shoes_pack_addr( PackStream *stream, const socks_atyp_e atyp, const socks_addr_u *addr ) {
-	if( stream == NULL || addr == NULL ) {
+static shoes_rc_e shoes_write( int fd, struct shoes_connstate_t *connstate ) {
+	if( connstate == NULL ) {
 		errno = EINVAL;
 		return SHOES_ERR_ERRNO;
 	}
 
-	size_t addr_len;
-	switch( atyp ) {
-		case SOCKS_ATYP_IPV6:
-			if( pack(stream, "u8>[16]", addr->ip6->s6_addr) == -1 ) return SHOES_ERR_ERRNO;
+	uint8_t *bufptr = connstate->bufptr;
+	size_t bufremain = connstate->bufremain;
+
+	shoes_rc_e rc = SHOES_ERR_NOERR;
+	do {
+		ssize_t ret = write(fd, bufptr, bufremain);
+		if( ret == -1 ) {
+			if( errno == EINTR ) continue;
+			rc = SHOES_ERR_ERRNO;
 			break;
-		case SOCKS_ATYP_IPV4:
-			if( pack(stream, "u32>", addr->ip4->s_addr) == -1 ) return SHOES_ERR_ERRNO;
-			break;
-		case SOCKS_ATYP_HOSTNAME:
-			addr_len = strlen(addr->hostname);
-			if( pack(stream, "u8> u8>[]", addr_len, addr->hostname, addr_len) == -1 ) return SHOES_ERR_ERRNO;
-			break;
-		default:
-			errno = EINVAL;
-			return SHOES_ERR_ERRNO;
-	}
-	return SHOES_ERR_NOERR;
+		}
+		bufremain -= ret;
+		bufptr += ret;
+	} while( bufremain != 0 );
+
+	connstate->bufremain = bufremain;
+	connstate->bufptr = bufptr;
+	return rc;
 }
 
-static shoes_rc_e shoes_pack_request( PackStream *stream, const socks_request_t *request ) {
-	if( stream == NULL || request == NULL ) {
+static shoes_rc_e shoes_read( int fd, struct shoes_connstate_t *connstate ) {
+	if( connstate == NULL ) {
 		errno = EINVAL;
 		return SHOES_ERR_ERRNO;
 	}
 
-	if( pack(stream, "u8>4", request->ver, request->cmd, 0x00, request->atyp) == -1 ) return SHOES_ERR_ERRNO;
-	shoes_rc_e rc = shoes_pack_addr(stream, request->atyp, &request->dst_addr);
-	if( rc != SHOES_ERR_NOERR ) return rc;
-	return pack(stream, "u16>", request->dst_port) == -1 ? SHOES_ERR_ERRNO : SHOES_ERR_NOERR;
+	uint8_t *bufptr = connstate->bufptr;
+	size_t bufremain = connstate->bufremain;
+
+	shoes_rc_e rc = SHOES_ERR_NOERR;
+	do {
+		ssize_t ret = read(fd, bufptr, bufremain);
+		if( ret == -1 ) {
+			if( errno == EINTR ) continue;
+			rc = SHOES_ERR_ERRNO;
+			break;
+		}
+		bufremain -= ret;
+		bufptr += ret;
+	} while( bufremain != 0 );
+
+	connstate->bufremain = bufremain;
+	connstate->bufptr = bufptr;
+	return rc;
 }
 
-shoes_rc_e shoes_handshake_f( struct shoes_conn_t *conn, FILE *sock ) {
-	if( conn == NULL || sock == NULL ) {
-		errno = EINVAL;
-		return SHOES_ERR_ERRNO;
-	}
-
-	PackStream *stream = packstream_file_new(sock);
-	if( stream == NULL ) return SHOES_ERR_ERRNO;
-
-	shoes_rc_e rc;
-	if( (rc = shoes_pack_version(stream, &conn->ver)) != SHOES_ERR_NOERR ) {
-		packstream_file_free(stream);
-		return rc;
-	}
-
-	socks_methodsel_t *methodsel;
-	if( (rc = shoes_unpack_methodsel(stream, &methodsel)) != SHOES_ERR_NOERR ) {
-		packstream_file_free(stream);
-		return rc;
-	}
-	free(methodsel);
-
-	if( (rc = shoes_pack_request(stream, &conn->req)) != SHOES_ERR_NOERR ) {
-		packstream_file_free(stream);
-		return rc;
-	}
-	
-	socks_reply_t *reply;
-	if( (rc = shoes_unpack_reply(stream, &reply)) != SHOES_ERR_NOERR ) {
-		packstream_file_free(stream);
-		return rc;
-	}
-	shoes_free_addr_u(reply->bnd_addr, reply->atyp);
-	free(reply);
-
-	packstream_file_free(stream);
-	
-	return SHOES_ERR_NOERR;
-}
-
-shoes_rc_e shoes_handshake( struct shoes_conn_t *conn, int socket ) {
+shoes_rc_e shoes_handshake( struct shoes_conn_t *conn, struct shoes_connstate_t *state, int sockfd ) {
 	if( conn == NULL ) {
 		errno = EINVAL;
 		return SHOES_ERR_ERRNO;
 	}
 
-	int sockfd = dup(socket);
-	if( sockfd == -1 ) return SHOES_ERR_ERRNO;
-	FILE *sock = fdopen(sockfd, "a+");
-	if( sock == NULL ) {
-		close(sockfd);
-		return SHOES_ERR_ERRNO;
+	struct shoes_connstate_t cs;
+	struct shoes_connstate_t *connstate;
+	if( state == NULL ) {
+		bzero(&cs, sizeof(struct shoes_connstate_t));
+		cs.state = SHOES_CONN_VERSION_PREPARE;
+		connstate = &cs;
+	} else {
+		connstate = state;
 	}
-	shoes_rc_e rc = shoes_handshake_f(conn, sock);
-	fclose(sock);
-	return rc;
+	shoes_rc_e rc;
+	while( connstate->state != SHOES_CONN_CONNECTED ) {
+		switch( connstate->state ) {
+			case SHOES_CONN_VERSION_PREPARE: {
+				socks_version_t *ver = &conn->ver;
+				if( (rc = shoes_connbuf_alloc(connstate, ver->nmethods + (2 * sizeof(uint8_t)))) != SHOES_ERR_NOERR ) return rc;
+				uint8_t *buf = connstate->buf;
+				buf[0] = ver->ver;
+				buf[1] = ver->nmethods;
+				for( int i = 0; i < ver->nmethods; i++ )
+					buf[i + 2] = ver->methods[i];
+				connstate->state = SHOES_CONN_VERSION_SENDING;
+				break;
+			}
+			case SHOES_CONN_VERSION_SENDING: {
+				if( (rc = shoes_write(sockfd, connstate)) != SHOES_ERR_NOERR ) return rc;
+				connstate->state = SHOES_CONN_METHODSEL_PREPARE;
+				break;
+			}
+			case SHOES_CONN_METHODSEL_PREPARE: {
+				if( (rc = shoes_connbuf_alloc(connstate, 2 * sizeof(uint8_t))) != SHOES_ERR_NOERR ) return rc;
+				connstate->state = SHOES_CONN_METHODSEL_READING;
+				break;
+			}
+			case SHOES_CONN_METHODSEL_READING: {
+				if( (rc = shoes_read(sockfd, connstate)) != SHOES_ERR_NOERR ) return rc;
+				if( connstate->buf[0] != conn->ver.ver ) {
+					connstate->state = SHOES_CONN_INVALID;
+					return SHOES_ERR_BADPACKET;
+				}
+				connstate->state = SHOES_CONN_REQUEST_PREPARE;
+				break;
+			}
+			case SHOES_CONN_REQUEST_PREPARE: {
+				socks_request_t *req = &conn->req;
+				size_t addrsiz = req->addrsiz;
+				if( (rc = shoes_connbuf_alloc(connstate, addrsiz + (4 * sizeof(uint8_t)) + sizeof(uint16_t))) != SHOES_ERR_NOERR ) return rc;
+				uint8_t *buf = connstate->buf;
+				buf[0] = req->ver;
+				buf[1] = req->cmd;
+				buf[2] = 0x00;
+				buf[3] = req->atyp;
+				uint8_t *bufptr = buf + 4;
+				switch( req->atyp ) {
+					case SOCKS_ATYP_IPV6:
+						memcpy(bufptr, req->dst_addr.ip6, addrsiz);
+						break;
+					case SOCKS_ATYP_IPV4:
+						memcpy(bufptr, req->dst_addr.ip4, addrsiz);
+						break;
+					case SOCKS_ATYP_HOSTNAME: {
+						*(bufptr++) = --addrsiz;
+						memcpy(bufptr, req->dst_addr.hostname, addrsiz);
+						break;
+					}
+					default:
+						errno = EINVAL;
+						return SHOES_ERR_ERRNO;
+				}
+				bufptr += addrsiz;
+				memcpy(bufptr, &req->dst_port, sizeof(uint16_t));
+				connstate->state = SHOES_CONN_REQUEST_SENDING;
+				break;
+			}
+			case SHOES_CONN_REQUEST_SENDING: {
+				if( (rc = shoes_write(sockfd, connstate)) != SHOES_ERR_NOERR ) return rc;
+				connstate->state = SHOES_CONN_REPLY_HEADER_PREPARE;
+				break;
+			}
+			case SHOES_CONN_REPLY_HEADER_PREPARE: {
+				if( (rc = shoes_connbuf_alloc(connstate, 4 * sizeof(uint8_t))) != SHOES_ERR_NOERR ) return rc;
+				if( (connstate->data = realloc(connstate->data, sizeof(uint8_t))) == NULL ) return SHOES_ERR_ERRNO;
+				connstate->state = SHOES_CONN_REPLY_HEADER_READING;
+				break;
+			}
+			case SHOES_CONN_REPLY_HEADER_READING: {
+				if( (rc = shoes_read(sockfd, connstate)) != SHOES_ERR_NOERR ) return rc;
+				if( connstate->buf[0] != conn->req.ver ) {
+					connstate->state = SHOES_CONN_INVALID;
+					return SHOES_ERR_BADPACKET;
+				}
+				if( connstate->buf[1] != SHOES_ERR_NOERR ) {
+					connstate->state = SHOES_CONN_INVALID;
+					return connstate->buf[1];
+				}
+				uint8_t *addrsiz = (uint8_t *) connstate->data;
+				switch( connstate->buf[3] ) {
+					case SOCKS_ATYP_IPV6:
+						*addrsiz = 16;
+						connstate->state = SHOES_CONN_REPLY_PREPARE;
+						break;
+					case SOCKS_ATYP_IPV4:
+						*addrsiz = 4;
+						connstate->state = SHOES_CONN_REPLY_PREPARE;
+						break;
+					case SOCKS_ATYP_HOSTNAME:
+						connstate->state = SHOES_CONN_REPLY_HEADER_HOSTLEN_PREPARE;
+						break;
+					default:
+						errno = EINVAL;
+						return SHOES_ERR_ERRNO;
+				}
+				break;
+			}
+			case SHOES_CONN_REPLY_HEADER_HOSTLEN_PREPARE: {
+				if( (rc = shoes_connbuf_alloc(connstate, sizeof(uint8_t))) != SHOES_ERR_NOERR ) return rc;
+				connstate->state = SHOES_CONN_REPLY_HEADER_HOSTLEN_READING;
+				break;
+			}
+			case SHOES_CONN_REPLY_HEADER_HOSTLEN_READING: {
+				if( (rc = shoes_read(sockfd, connstate)) != SHOES_ERR_NOERR ) return rc;
+				*((uint8_t *) connstate->data) = connstate->buf[0];
+				connstate->state = SHOES_CONN_REPLY_PREPARE;
+				break;
+			}
+			case SHOES_CONN_REPLY_PREPARE: {
+				if( (rc = shoes_connbuf_alloc(connstate, *((uint8_t *) connstate->data) + sizeof(uint16_t))) != SHOES_ERR_NOERR ) return rc;
+				connstate->state = SHOES_CONN_REPLY_READING;
+				break;
+			}
+			case SHOES_CONN_REPLY_READING: {
+				if( (rc = shoes_read(sockfd, connstate)) != SHOES_ERR_NOERR ) return rc;
+				connstate->state = SHOES_CONN_CONNECTED;
+				break;
+			}
+			case SHOES_CONN_INVALID:
+			default: {
+				errno = EINVAL;
+				return SHOES_ERR_ERRNO;
+			}
+		}
+	}
+	return SHOES_ERR_NOERR;
 }

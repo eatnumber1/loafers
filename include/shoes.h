@@ -28,22 +28,28 @@ typedef enum {
 	SHOES_ERR_CMDNOTSUP = 0x07,
 	SHOES_ERR_AFNOTSUP = 0x08,
 	SHOES_ERR_BADPACKET,
-	SHOES_ERR_NOTIMPL,
 	// Must be last for shoes_strerror
 	SHOES_ERR_ERRNO = 0xFF
 } shoes_rc_e;
 
 struct shoes_conn_t;
+struct shoes_connstate_t;
 
 const char *shoes_strerror( shoes_rc_e err );
-shoes_rc_e shoes_alloc( struct shoes_conn_t **conn );
-void shoes_free( struct shoes_conn_t *conn );
+shoes_rc_e shoes_conn_alloc( struct shoes_conn_t **conn );
+shoes_rc_e shoes_conn_free( struct shoes_conn_t *conn );
+shoes_rc_e shoes_connstate_alloc( struct shoes_connstate_t **connstate );
+shoes_rc_e shoes_connstate_free( struct shoes_connstate_t *connstate );
 shoes_rc_e shoes_set_version( struct shoes_conn_t *conn, socks_version_e version );
 shoes_rc_e shoes_set_methods( struct shoes_conn_t *conn, const socks_method_e *methods, uint8_t nmethods );
 shoes_rc_e shoes_set_command( struct shoes_conn_t *conn, socks_cmd_e cmd );
 shoes_rc_e shoes_set_hostname( struct shoes_conn_t *conn, const char *hostname, in_port_t port );
 shoes_rc_e shoes_set_sockaddr( struct shoes_conn_t *conn, const struct sockaddr *address );
-shoes_rc_e shoes_handshake_f( struct shoes_conn_t *conn, FILE *sock );
-shoes_rc_e shoes_handshake( struct shoes_conn_t *conn, int socket );
+
+bool shoes_is_connected( struct shoes_connstate_t *connstate );
+bool shoes_needs_write( struct shoes_connstate_t *connstate );
+bool shoes_needs_read( struct shoes_connstate_t *connstate );
+
+shoes_rc_e shoes_handshake( struct shoes_conn_t *conn, struct shoes_connstate_t *connstate, int sockfd );
 
 #endif
