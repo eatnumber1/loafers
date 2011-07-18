@@ -111,6 +111,7 @@ const char *shoes_strerror( shoes_rc_e err ) {
 		[SHOES_ERR_CMDNOTSUP] = "Command not supported",
 		[SHOES_ERR_AFNOTSUP] = "Address type not supported",
 		[SHOES_ERR_BADPACKET] = "Bad packet",
+		[SHOES_ERR_EOF] = "Premature EOF",
 	};
 	static const size_t noerrors = sizeof(errors) / sizeof(char *);
 	if( err >= noerrors ) return "Unknown error";
@@ -361,6 +362,9 @@ static shoes_rc_e shoes_read( int fd, struct shoes_connstate_t *connstate ) {
 		if( ret == -1 ) {
 			if( errno == EINTR ) continue;
 			rc = SHOES_ERR_ERRNO;
+			break;
+		} else if( ret == 0 ) {
+			rc = SHOES_ERR_EOF;
 			break;
 		}
 		bufremain -= ret;

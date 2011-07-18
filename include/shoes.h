@@ -28,6 +28,7 @@ typedef enum {
 	SHOES_ERR_CMDNOTSUP = 0x07,
 	SHOES_ERR_AFNOTSUP = 0x08,
 	SHOES_ERR_BADPACKET,
+	SHOES_ERR_EOF,
 	// Must be last for shoes_strerror
 	SHOES_ERR_ERRNO = 0xFF
 } shoes_rc_e;
