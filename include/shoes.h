@@ -1,5 +1,5 @@
-#ifndef SHOES_H
-#define SHOES_H
+#ifndef __SHOES_H__
+#define __SHOES_H__
 
 typedef enum {
 	SOCKS_CMD_CONNECT = 0x01,
