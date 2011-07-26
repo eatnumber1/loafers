@@ -25,3 +25,4 @@ stamp-h1
 .libs/
 libshoes.la
 libshoes_la-shoes.lo
+*.dSYM/

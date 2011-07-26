@@ -1,0 +1,16 @@
+Shoes is a client side SOCKS library.
+
+Currently, only SOCKSv5 CONNECT is supported, but a complete, standards
+compliant implementation is planned.
+
+To use libshoes, a shoes_conn_t structure must be created and initialized. The
+shoes_conn_t structure provides connection information to the handshake
+routines such as hostname and port. If non-blocking sockets are used, libshoes
+provides a shoes_connstate_t structure which tracks the current progress of the
+handshake, allowing the handshake routines to be called repeatedly without loss
+of state.
+
+For the moment, the reader is referred to include/shoes.h for the available
+routines.
+
+<!-- vim: set tw=80: -->
