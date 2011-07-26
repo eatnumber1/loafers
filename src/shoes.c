@@ -1,23 +1,10 @@
-// TODO: Optimize the includes.
-
-#include <stdio.h>
-#include <string.h>
-#include <inttypes.h>
-#include <arpa/inet.h>
-#include <strings.h>
-
-#include <stdint.h>
-
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <limits.h>
-#include <netdb.h>
-
-#include <errno.h>
 #include <stdlib.h>
 #include <stdint.h>
 #include <stdbool.h>
+#include <errno.h>
 #include <assert.h>
+#include <string.h>
+#include <netinet/in.h>
 #include <unistd.h>
 
 #include "shoes.h"
