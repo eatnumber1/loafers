@@ -31,6 +31,8 @@ typedef enum {
 	SHOES_ERR_AFNOTSUP = 0x08,
 	SHOES_ERR_BADPACKET,
 	SHOES_ERR_EOF,
+	SHOES_ERR_NEED_READ,
+	SHOES_ERR_NEED_WRITE,
 	// Must be last for shoes_strerror
 	SHOES_ERR_ERRNO = 0xFF
 } shoes_rc_e;
@@ -48,8 +50,6 @@ shoes_rc_e shoes_set_hostname( struct shoes_conn_t *conn, const char hostname[st
 shoes_rc_e shoes_set_sockaddr( struct shoes_conn_t *conn, const struct sockaddr *address );
 
 bool shoes_is_connected( struct shoes_conn_t *conn );
-bool shoes_needs_write( struct shoes_conn_t *conn );
-bool shoes_needs_read( struct shoes_conn_t *conn );
 
 shoes_rc_e shoes_handshake( struct shoes_conn_t *conn, int sockfd );
 

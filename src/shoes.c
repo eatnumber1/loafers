@@ -342,8 +342,13 @@ static shoes_rc_e shoes_write( int fd, struct shoes_conn_t *conn ) {
 	do {
 		ssize_t ret = write(fd, bufptr, bufremain);
 		if( ret == -1 ) {
-			if( errno == EINTR ) continue;
-			rc = SHOES_ERR_ERRNO;
+			if( errno == EINTR ) {
+				continue;
+			} else if( errno == EAGAIN || errno == EWOULDBLOCK ) {
+				rc = SHOES_ERR_NEED_WRITE;
+			} else {
+				rc = SHOES_ERR_ERRNO;
+			}
 			break;
 		}
 		bufremain -= ret;
@@ -369,8 +374,13 @@ static shoes_rc_e shoes_read( int fd, struct shoes_conn_t *conn ) {
 	do {
 		ssize_t ret = read(fd, bufptr, bufremain);
 		if( ret == -1 ) {
-			if( errno == EINTR ) continue;
-			rc = SHOES_ERR_ERRNO;
+			if( errno == EINTR ) {
+				continue;
+			} else if( errno == EAGAIN || errno == EWOULDBLOCK ) {
+				rc = SHOES_ERR_NEED_READ;
+			} else {
+				rc = SHOES_ERR_ERRNO;
+			}
 			break;
 		} else if( ret == 0 ) {
 			rc = SHOES_ERR_EOF;

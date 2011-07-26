@@ -88,7 +88,7 @@ int main( int argc, char *argv[] ) {
 	FD_SET(sock, &wfds);
 	while( true ) {
 		if( (rc = shoes_handshake(conn, sock)) != SHOES_ERR_NOERR ) {
-			if( rc != SHOES_ERR_ERRNO || ( errno != EAGAIN && errno != EWOULDBLOCK ) ) {
+			if( rc != SHOES_ERR_ERRNO && rc != SHOES_ERR_NEED_WRITE && rc != SHOES_ERR_NEED_READ ) {
 				fprintf(stderr, "shoes_handshake: %s\n", shoes_strerror(rc));
 				shoes_conn_free(conn);
 				exit(EXIT_FAILURE);
@@ -97,12 +97,12 @@ int main( int argc, char *argv[] ) {
 		if( shoes_is_connected(conn) ) {
 			break;
 		} else {
-			if( shoes_needs_write(conn) ) {
+			if( rc == SHOES_ERR_NEED_WRITE ) {
 				if( select(sock + 1, NULL, &wfds, NULL, NULL) == -1 ) {
 					perror("select");
 					exit(EXIT_FAILURE);
 				}
-			} else if( shoes_needs_read(conn) ) {
+			} else if( rc == SHOES_ERR_NEED_READ ) {
 				if( select(sock + 1, &rfds, NULL, NULL, NULL) == -1 ) {
 					perror("select");
 					exit(EXIT_FAILURE);
