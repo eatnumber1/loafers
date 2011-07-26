@@ -65,7 +65,7 @@ int main( int argc, char *argv[] ) {
 		exit(EXIT_FAILURE);
 	}
 	socks_method_e methods[] = { SOCKS_METHOD_NONE };
-	if( (rc = shoes_set_methods(conn, methods, 1)) != SHOES_ERR_NOERR ) {
+	if( (rc = shoes_set_methods(conn, 1, methods)) != SHOES_ERR_NOERR ) {
 		fprintf(stderr, "shoes_set_methods: %s\n", shoes_strerror(rc));
 		shoes_conn_free(conn);
 		exit(EXIT_FAILURE);

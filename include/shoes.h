@@ -44,7 +44,7 @@ const char *shoes_strerror( shoes_rc_e err );
 shoes_rc_e shoes_conn_alloc( struct shoes_conn_t **conn );
 shoes_rc_e shoes_conn_free( struct shoes_conn_t *conn );
 shoes_rc_e shoes_set_version( struct shoes_conn_t *conn, socks_version_e version );
-shoes_rc_e shoes_set_methods( struct shoes_conn_t *conn, const socks_method_e *methods, uint8_t nmethods );
+shoes_rc_e shoes_set_methods( struct shoes_conn_t *conn, uint8_t nmethods, const socks_method_e methods[static nmethods] );
 shoes_rc_e shoes_set_command( struct shoes_conn_t *conn, socks_cmd_e cmd );
 shoes_rc_e shoes_set_hostname( struct shoes_conn_t *conn, const char hostname[static], in_port_t port );
 shoes_rc_e shoes_set_sockaddr( struct shoes_conn_t *conn, const struct sockaddr *address );

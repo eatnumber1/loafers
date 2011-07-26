@@ -195,7 +195,7 @@ shoes_rc_e shoes_set_version( struct shoes_conn_t *conn, socks_version_e version
 	return SHOES_ERR_NOERR;
 }
 
-shoes_rc_e shoes_set_methods( struct shoes_conn_t *conn, const socks_method_e *methods, uint8_t nmethods ) {
+shoes_rc_e shoes_set_methods( struct shoes_conn_t *conn, uint8_t nmethods, const socks_method_e methods[static nmethods] ) {
 	if( conn == NULL || methods == NULL ) {
 		assert(false);
 		errno = EINVAL;
