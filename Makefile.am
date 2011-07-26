@@ -15,7 +15,7 @@ pkgconfig_DATA = shoes.pc
 
 .PHONY: examples
 
-examples: all
+all-local:
 	$(MAKE) -C examples
 
 clean-local:
