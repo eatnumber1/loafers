@@ -23,5 +23,5 @@ AC_TYPE_UINT8_T
 AC_FUNC_MALLOC
 AC_CHECK_FUNCS([bzero dup2 socket strdup])
 
-AC_CONFIG_FILES([Makefile shoes.pc])
+AC_CONFIG_FILES([Makefile examples/Makefile shoes.pc])
 AC_OUTPUT

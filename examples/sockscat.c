@@ -27,7 +27,7 @@ int main( int argc, char *argv[] ) {
 		exit(EXIT_FAILURE);
 	}
 
-	int sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+	int sock = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
 	if( sock == -1 ) {
 		perror("socket");
 		exit(EXIT_FAILURE);
@@ -66,7 +66,7 @@ int main( int argc, char *argv[] ) {
 		shoes_conn_free(conn);
 		exit(EXIT_FAILURE);
 	}
-	if( (rc = shoes_handshake(conn, NULL, sock)) != SHOES_ERR_NOERR ) {
+	if( (rc = shoes_handshake(conn, sock)) != SHOES_ERR_NOERR ) {
 		fprintf(stderr, "shoes_handshake: %s\n", shoes_strerror(rc));
 		shoes_conn_free(conn);
 		exit(EXIT_FAILURE);

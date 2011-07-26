@@ -29,7 +29,7 @@ int main( int argc, char *argv[] ) {
 		exit(EXIT_FAILURE);
 	}
 
-	int sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+	int sock = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
 	if( sock == -1 ) {
 		perror("socket");
 		exit(EXIT_FAILURE);
@@ -80,12 +80,6 @@ int main( int argc, char *argv[] ) {
 		shoes_conn_free(conn);
 		exit(EXIT_FAILURE);
 	}
-	struct shoes_connstate_t *connstate;
-	if( (rc = shoes_connstate_alloc(&connstate)) != SHOES_ERR_NOERR ) {
-		fprintf(stderr, "shoes_connstate_alloc: %s\n", shoes_strerror(rc));
-		shoes_conn_free(conn);
-		exit(EXIT_FAILURE);
-	}
 
 	fd_set rfds, wfds;
 	FD_ZERO(&rfds);
@@ -93,23 +87,22 @@ int main( int argc, char *argv[] ) {
 	FD_SET(sock, &rfds);
 	FD_SET(sock, &wfds);
 	while( true ) {
-		if( (rc = shoes_handshake(conn, connstate, sock)) != SHOES_ERR_NOERR ) {
+		if( (rc = shoes_handshake(conn, sock)) != SHOES_ERR_NOERR ) {
 			if( rc != SHOES_ERR_ERRNO || ( errno != EAGAIN && errno != EWOULDBLOCK ) ) {
 				fprintf(stderr, "shoes_handshake: %s\n", shoes_strerror(rc));
-				shoes_connstate_free(connstate);
 				shoes_conn_free(conn);
 				exit(EXIT_FAILURE);
 			}
 		}
-		if( shoes_is_connected(connstate) ) {
+		if( shoes_is_connected(conn) ) {
 			break;
 		} else {
-			if( shoes_needs_write(connstate) ) {
+			if( shoes_needs_write(conn) ) {
 				if( select(sock + 1, NULL, &wfds, NULL, NULL) == -1 ) {
 					perror("select");
 					exit(EXIT_FAILURE);
 				}
-			} else if( shoes_needs_read(connstate) ) {
+			} else if( shoes_needs_read(conn) ) {
 				if( select(sock + 1, &rfds, NULL, NULL, NULL) == -1 ) {
 					perror("select");
 					exit(EXIT_FAILURE);
@@ -123,12 +116,6 @@ int main( int argc, char *argv[] ) {
 
 	if( (rc = shoes_conn_free(conn)) != SHOES_ERR_NOERR ) {
 		fprintf(stderr, "shoes_conn_free: %s\n", shoes_strerror(rc));
-		shoes_connstate_free(connstate);
-		exit(EXIT_FAILURE);
-	}
-	if( (rc = shoes_connstate_free(connstate)) != SHOES_ERR_NOERR ) {
-		fprintf(stderr, "shoes_connstate_free: %s\n", shoes_strerror(rc));
-		shoes_conn_free(conn);
 		exit(EXIT_FAILURE);
 	}
 
