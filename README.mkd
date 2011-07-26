@@ -1,7 +1,7 @@
 Shoes is a client side SOCKS library.
 
-Currently, only SOCKSv5 CONNECT is supported, but a complete, standards
-compliant implementation is planned.
+Currently, only SOCKSv5 CONNECT with no authentication is supported, but a
+complete, standards compliant implementation is planned.
 
 To use libshoes, a shoes_conn_t structure must be created and initialized. The
 shoes_conn_t structure provides connection and state information to the
