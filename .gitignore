@@ -26,3 +26,4 @@ stamp-h1
 libshoes.la
 libshoes_la-shoes.lo
 *.dSYM/
+config.cache
