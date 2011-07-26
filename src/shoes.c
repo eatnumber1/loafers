@@ -99,6 +99,8 @@ const char *shoes_strerror( shoes_rc_e err ) {
 		[SHOES_ERR_AFNOTSUP] = "Address type not supported",
 		[SHOES_ERR_BADPACKET] = "Bad packet",
 		[SHOES_ERR_EOF] = "Premature EOF",
+		[SHOES_ERR_NEED_READ] = "Handshake needs read",
+		[SHOES_ERR_NEED_WRITE] = "Handshake needs write"
 	};
 	static const size_t noerrors = sizeof(errors) / sizeof(char *);
 	if( err >= noerrors ) return "Unknown error";
