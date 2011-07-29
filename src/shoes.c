@@ -70,7 +70,7 @@ typedef enum {
 	SHOES_CONN_INVALID
 } shoes_conn_e;
 
-struct shoes_conn_t {
+struct _shoes_conn_t {
 	socks_version_t ver;
 	socks_request_t req;
 	socks_reply_t reply;
@@ -128,21 +128,21 @@ static shoes_rc_e shoes_free_addr_u( socks_atyp_e atyp, socks_addr_u addr ) {
 	return SHOES_ERR_NOERR;
 }
 
-shoes_rc_e shoes_conn_alloc( struct shoes_conn_t **conn ) {
+shoes_rc_e shoes_conn_alloc( shoes_conn_t **conn ) {
 	if( conn == NULL ) {
 		assert(false);
 		errno = EINVAL;
 		return SHOES_ERR_ERRNO;
 	}
 
-	*conn = malloc(sizeof(struct shoes_conn_t));
+	*conn = malloc(sizeof(shoes_conn_t));
 	if( *conn == NULL ) return SHOES_ERR_ERRNO;
-	bzero(*conn, sizeof(struct shoes_conn_t));
+	bzero(*conn, sizeof(shoes_conn_t));
 	(*conn)->state = SHOES_CONN_UNPREPARED;
 	return SHOES_ERR_NOERR;
 }
 
-shoes_rc_e shoes_conn_free( struct shoes_conn_t *conn ) {
+shoes_rc_e shoes_conn_free( shoes_conn_t *conn ) {
 	if( conn == NULL ) {
 		assert(false);
 		errno = EINVAL;
@@ -161,7 +161,7 @@ shoes_rc_e shoes_conn_free( struct shoes_conn_t *conn ) {
 	return rc;
 }
 
-static void shoes_set_prepared( struct shoes_conn_t *conn ) {
+static void shoes_set_prepared( shoes_conn_t *conn ) {
 	if( conn->ver.ver != SOCKS_VERSION_UNINIT &&
 			conn->req.ver != SOCKS_VERSION_UNINIT &&
 			conn->ver.nmethods != 0 &&
@@ -170,7 +170,7 @@ static void shoes_set_prepared( struct shoes_conn_t *conn ) {
 		conn->state = SHOES_CONN_VERSION_PREPARE;
 }
 
-shoes_rc_e shoes_set_version( struct shoes_conn_t *conn, socks_version_e version ) {
+shoes_rc_e shoes_set_version( shoes_conn_t *conn, socks_version_e version ) {
 	if( conn == NULL ) {
 		assert(false);
 		errno = EINVAL;
@@ -184,7 +184,7 @@ shoes_rc_e shoes_set_version( struct shoes_conn_t *conn, socks_version_e version
 	return SHOES_ERR_NOERR;
 }
 
-shoes_rc_e shoes_set_methods( struct shoes_conn_t *conn, uint8_t nmethods, const socks_method_e methods[static nmethods] ) {
+shoes_rc_e shoes_set_methods( shoes_conn_t *conn, uint8_t nmethods, const socks_method_e methods[static nmethods] ) {
 	if( conn == NULL || methods == NULL ) {
 		assert(false);
 		errno = EINVAL;
@@ -200,7 +200,7 @@ shoes_rc_e shoes_set_methods( struct shoes_conn_t *conn, uint8_t nmethods, const
 	return SHOES_ERR_NOERR;
 }
 
-shoes_rc_e shoes_set_command( struct shoes_conn_t *conn, socks_cmd_e cmd ) {
+shoes_rc_e shoes_set_command( shoes_conn_t *conn, socks_cmd_e cmd ) {
 	if( conn == NULL ) {
 		assert(false);
 		errno = EINVAL;
@@ -212,7 +212,7 @@ shoes_rc_e shoes_set_command( struct shoes_conn_t *conn, socks_cmd_e cmd ) {
 	return SHOES_ERR_NOERR;
 }
 
-static shoes_rc_e shoes_set_atyp( struct shoes_conn_t *conn, socks_atyp_e atyp ) {
+static shoes_rc_e shoes_set_atyp( shoes_conn_t *conn, socks_atyp_e atyp ) {
 	if( conn == NULL ) {
 		assert(false);
 		errno = EINVAL;
@@ -224,7 +224,7 @@ static shoes_rc_e shoes_set_atyp( struct shoes_conn_t *conn, socks_atyp_e atyp )
 	return SHOES_ERR_NOERR;
 }
 
-shoes_rc_e shoes_set_hostname( struct shoes_conn_t *conn, const char hostname[static], in_port_t port ) {
+shoes_rc_e shoes_set_hostname( shoes_conn_t *conn, const char hostname[static], in_port_t port ) {
 	if( conn == NULL || hostname == NULL ) {
 		assert(false);
 		errno = EINVAL;
@@ -244,7 +244,7 @@ shoes_rc_e shoes_set_hostname( struct shoes_conn_t *conn, const char hostname[st
 	return SHOES_ERR_NOERR;
 }
 
-shoes_rc_e shoes_set_sockaddr( struct shoes_conn_t *conn, const struct sockaddr *address ) {
+shoes_rc_e shoes_set_sockaddr( shoes_conn_t *conn, const struct sockaddr *address ) {
 	if( conn == NULL || address == NULL ) {
 		assert(false);
 		errno = EINVAL;
@@ -282,12 +282,12 @@ shoes_rc_e shoes_set_sockaddr( struct shoes_conn_t *conn, const struct sockaddr 
 	return SHOES_ERR_NOERR;
 }
 
-bool shoes_is_connected( struct shoes_conn_t *conn ) {
+bool shoes_is_connected( shoes_conn_t *conn ) {
 	assert(conn != NULL);
 	return conn->state == SHOES_CONN_CONNECTED;
 }
 
-bool shoes_needs_write( struct shoes_conn_t *conn ) {
+bool shoes_needs_write( shoes_conn_t *conn ) {
 	assert(conn != NULL);
 	return conn->state == SHOES_CONN_VERSION_PREPARE ||
 		conn->state == SHOES_CONN_VERSION_SENDING ||
@@ -295,7 +295,7 @@ bool shoes_needs_write( struct shoes_conn_t *conn ) {
 		conn->state == SHOES_CONN_REQUEST_SENDING;
 }
 
-bool shoes_needs_read( struct shoes_conn_t *conn ) {
+bool shoes_needs_read( shoes_conn_t *conn ) {
 	assert(conn != NULL);
 	return conn->state == SHOES_CONN_METHODSEL_PREPARE ||
 		conn->state == SHOES_CONN_METHODSEL_READING ||
@@ -307,7 +307,7 @@ bool shoes_needs_read( struct shoes_conn_t *conn ) {
 		conn->state == SHOES_CONN_REPLY_READING;
 }
 
-static shoes_rc_e shoes_connbuf_alloc( struct shoes_conn_t *conn, size_t count ) {
+static shoes_rc_e shoes_connbuf_alloc( shoes_conn_t *conn, size_t count ) {
 	size_t bufsiz = count * sizeof(uint8_t);
 	uint8_t *buf = realloc(conn->buf, bufsiz);
 	if( buf == NULL ) return SHOES_ERR_ERRNO;
@@ -317,7 +317,7 @@ static shoes_rc_e shoes_connbuf_alloc( struct shoes_conn_t *conn, size_t count )
 	return SHOES_ERR_NOERR;
 }
 
-static shoes_rc_e shoes_write( int fd, struct shoes_conn_t *conn ) {
+static shoes_rc_e shoes_write( int fd, shoes_conn_t *conn ) {
 	if( conn == NULL ) {
 		assert(false);
 		errno = EINVAL;
@@ -349,7 +349,7 @@ static shoes_rc_e shoes_write( int fd, struct shoes_conn_t *conn ) {
 	return rc;
 }
 
-static shoes_rc_e shoes_read( int fd, struct shoes_conn_t *conn ) {
+static shoes_rc_e shoes_read( int fd, shoes_conn_t *conn ) {
 	if( conn == NULL ) {
 		assert(false);
 		errno = EINVAL;
@@ -384,7 +384,7 @@ static shoes_rc_e shoes_read( int fd, struct shoes_conn_t *conn ) {
 	return rc;
 }
 
-shoes_rc_e shoes_handshake( struct shoes_conn_t *conn, int sockfd ) {
+shoes_rc_e shoes_handshake( shoes_conn_t *conn, int sockfd ) {
 	if( conn == NULL ) {
 		assert(false);
 		errno = EINVAL;

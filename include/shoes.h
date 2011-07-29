@@ -37,19 +37,20 @@ typedef enum {
 	SHOES_ERR_ERRNO = 0xFF
 } shoes_rc_e;
 
-struct shoes_conn_t;
+struct _shoes_conn_t;
+typedef struct _shoes_conn_t shoes_conn_t;
 
 const char *shoes_strerror( shoes_rc_e err );
-shoes_rc_e shoes_conn_alloc( struct shoes_conn_t **conn );
-shoes_rc_e shoes_conn_free( struct shoes_conn_t *conn );
-shoes_rc_e shoes_set_version( struct shoes_conn_t *conn, socks_version_e version );
-shoes_rc_e shoes_set_methods( struct shoes_conn_t *conn, uint8_t nmethods, const socks_method_e methods[static nmethods] );
-shoes_rc_e shoes_set_command( struct shoes_conn_t *conn, socks_cmd_e cmd );
-shoes_rc_e shoes_set_hostname( struct shoes_conn_t *conn, const char hostname[static], in_port_t port );
-shoes_rc_e shoes_set_sockaddr( struct shoes_conn_t *conn, const struct sockaddr *address );
+shoes_rc_e shoes_conn_alloc( shoes_conn_t **conn );
+shoes_rc_e shoes_conn_free( shoes_conn_t *conn );
+shoes_rc_e shoes_set_version( shoes_conn_t *conn, socks_version_e version );
+shoes_rc_e shoes_set_methods( shoes_conn_t *conn, uint8_t nmethods, const socks_method_e methods[static nmethods] );
+shoes_rc_e shoes_set_command( shoes_conn_t *conn, socks_cmd_e cmd );
+shoes_rc_e shoes_set_hostname( shoes_conn_t *conn, const char hostname[static], in_port_t port );
+shoes_rc_e shoes_set_sockaddr( shoes_conn_t *conn, const struct sockaddr *address );
 
-bool shoes_is_connected( struct shoes_conn_t *conn );
+bool shoes_is_connected( shoes_conn_t *conn );
 
-shoes_rc_e shoes_handshake( struct shoes_conn_t *conn, int sockfd );
+shoes_rc_e shoes_handshake( shoes_conn_t *conn, int sockfd );
 
 #endif

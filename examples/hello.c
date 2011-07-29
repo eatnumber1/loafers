@@ -38,7 +38,7 @@ int main( int argc, char *argv[] ) {
 	}
 	freeaddrinfo(res);
 
-	struct shoes_conn_t *conn;
+	shoes_conn_t *conn;
 	shoes_rc_e rc;
 	if( (rc = shoes_conn_alloc(&conn)) != SHOES_ERR_NOERR ) {
 		fprintf(stderr, "shoes_alloc: %s\n", shoes_strerror(rc));
