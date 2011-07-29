@@ -38,7 +38,6 @@ typedef enum {
 } shoes_rc_e;
 
 struct shoes_conn_t;
-struct shoes_conn_t;
 
 const char *shoes_strerror( shoes_rc_e err );
 shoes_rc_e shoes_conn_alloc( struct shoes_conn_t **conn );
