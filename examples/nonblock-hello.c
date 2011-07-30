@@ -53,29 +53,29 @@ int main( int argc, char *argv[] ) {
 	}
 
 	shoes_conn_t *conn;
-	shoes_rc_e rc;
-	if( (rc = shoes_conn_alloc(&conn)) != SHOES_ERR_NOERR ) {
+	shoes_rc_t rc;
+	if( shoes_errno(rc = shoes_conn_alloc(&conn)) != SHOES_ERR_NOERR ) {
 		fprintf(stderr, "shoes_alloc: %s\n", shoes_strerror(rc));
 		shoes_conn_free(conn);
 		exit(EXIT_FAILURE);
 	}
-	if( (rc = shoes_set_version(conn, SOCKS_VERSION_5)) != SHOES_ERR_NOERR ) {
+	if( shoes_errno(rc = shoes_set_version(conn, SOCKS_VERSION_5)) != SHOES_ERR_NOERR ) {
 		fprintf(stderr, "shoes_set_version: %s\n", shoes_strerror(rc));
 		shoes_conn_free(conn);
 		exit(EXIT_FAILURE);
 	}
 	socks_method_e methods[] = { SOCKS_METHOD_NONE };
-	if( (rc = shoes_set_methods(conn, 1, methods)) != SHOES_ERR_NOERR ) {
+	if( shoes_errno(rc = shoes_set_methods(conn, 1, methods)) != SHOES_ERR_NOERR ) {
 		fprintf(stderr, "shoes_set_methods: %s\n", shoes_strerror(rc));
 		shoes_conn_free(conn);
 		exit(EXIT_FAILURE);
 	}
-	if( (rc = shoes_set_command(conn, SOCKS_CMD_CONNECT)) != SHOES_ERR_NOERR ) {
+	if( shoes_errno(rc = shoes_set_command(conn, SOCKS_CMD_CONNECT)) != SHOES_ERR_NOERR ) {
 		fprintf(stderr, "shoes_set_command: %s\n", shoes_strerror(rc));
 		shoes_conn_free(conn);
 		exit(EXIT_FAILURE);
 	}
-	if( (rc = shoes_set_hostname(conn, argv[3], htons(atoi(argv[4])))) != SHOES_ERR_NOERR ) {
+	if( shoes_errno(rc = shoes_set_hostname(conn, argv[3], htons(atoi(argv[4])))) != SHOES_ERR_NOERR ) {
 		fprintf(stderr, "shoes_set_hostname: %s\n", shoes_strerror(rc));
 		shoes_conn_free(conn);
 		exit(EXIT_FAILURE);
@@ -86,35 +86,30 @@ int main( int argc, char *argv[] ) {
 	FD_ZERO(&wfds);
 	FD_SET(sock, &rfds);
 	FD_SET(sock, &wfds);
-	while( true ) {
-		if( (rc = shoes_handshake(conn, sock)) != SHOES_ERR_NOERR ) {
-			if( rc != SHOES_ERR_ERRNO && rc != SHOES_ERR_NEED_WRITE && rc != SHOES_ERR_NEED_READ ) {
-				fprintf(stderr, "shoes_handshake: %s\n", shoes_strerror(rc));
-				shoes_conn_free(conn);
-				exit(EXIT_FAILURE);
-			}
-		}
-		if( shoes_is_connected(conn) ) {
-			break;
-		} else {
-			if( rc == SHOES_ERR_NEED_WRITE ) {
+	while( !shoes_is_connected(conn) ) {
+		switch( shoes_errno(rc = shoes_handshake(conn, sock)) ) {
+			case SHOES_ERR_NOERR:
+				break;
+			case SHOES_ERR_NEED_WRITE:
 				if( select(sock + 1, NULL, &wfds, NULL, NULL) == -1 ) {
 					perror("select");
 					exit(EXIT_FAILURE);
 				}
-			} else if( rc == SHOES_ERR_NEED_READ ) {
+				break;
+			case SHOES_ERR_NEED_READ:
 				if( select(sock + 1, &rfds, NULL, NULL, NULL) == -1 ) {
 					perror("select");
 					exit(EXIT_FAILURE);
 				}
-			} else {
-				fprintf(stderr, "Handshake needs neither read nor write\n");
+				break;
+			default:
+				fprintf(stderr, "shoes_handshake: %s\n", shoes_strerror(rc));
+				shoes_conn_free(conn);
 				exit(EXIT_FAILURE);
-			}
 		}
 	}
 
-	if( (rc = shoes_conn_free(conn)) != SHOES_ERR_NOERR ) {
+	if( shoes_errno(rc = shoes_conn_free(conn)) != SHOES_ERR_NOERR ) {
 		fprintf(stderr, "shoes_conn_free: %s\n", shoes_strerror(rc));
 		exit(EXIT_FAILURE);
 	}
