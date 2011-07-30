@@ -86,8 +86,9 @@ int main( int argc, char *argv[] ) {
 	FD_ZERO(&wfds);
 	FD_SET(sock, &rfds);
 	FD_SET(sock, &wfds);
-	while( !shoes_is_connected(conn) ) {
-		switch( shoes_errno(rc = shoes_handshake(conn, sock)) ) {
+	shoes_err_e code;
+	do {
+		switch( code = shoes_errno(rc = shoes_handshake(conn, sock)) ) {
 			case SHOES_ERR_NOERR:
 				break;
 			case SHOES_ERR_NEED_WRITE:
@@ -107,7 +108,7 @@ int main( int argc, char *argv[] ) {
 				shoes_conn_free(conn);
 				exit(EXIT_FAILURE);
 		}
-	}
+	} while( code != SHOES_ERR_NOERR );
 
 	if( shoes_errno(rc = shoes_conn_free(conn)) != SHOES_ERR_NOERR ) {
 		fprintf(stderr, "shoes_conn_free: %s\n", shoes_strerror(rc));

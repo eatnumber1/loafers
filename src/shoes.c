@@ -259,31 +259,6 @@ shoes_rc_t shoes_set_sockaddr( shoes_conn_t *conn, const struct sockaddr *addres
 	return shoes_rc(SHOES_ERR_NOERR);
 }
 
-bool shoes_is_connected( shoes_conn_t *conn ) {
-	assert(conn != NULL);
-	return conn->state == SHOES_CONN_CONNECTED;
-}
-
-bool shoes_needs_write( shoes_conn_t *conn ) {
-	assert(conn != NULL);
-	return conn->state == SHOES_CONN_VERSION_PREPARE ||
-		conn->state == SHOES_CONN_VERSION_SENDING ||
-		conn->state == SHOES_CONN_REQUEST_PREPARE ||
-		conn->state == SHOES_CONN_REQUEST_SENDING;
-}
-
-bool shoes_needs_read( shoes_conn_t *conn ) {
-	assert(conn != NULL);
-	return conn->state == SHOES_CONN_METHODSEL_PREPARE ||
-		conn->state == SHOES_CONN_METHODSEL_READING ||
-		conn->state == SHOES_CONN_REPLY_HEADER_PREPARE ||
-		conn->state == SHOES_CONN_REPLY_HEADER_READING ||
-		conn->state == SHOES_CONN_REPLY_HEADER_HOSTLEN_PREPARE ||
-		conn->state == SHOES_CONN_REPLY_HEADER_HOSTLEN_READING ||
-		conn->state == SHOES_CONN_REPLY_PREPARE ||
-		conn->state == SHOES_CONN_REPLY_READING;
-}
-
 static shoes_rc_t shoes_connbuf_alloc( shoes_conn_t *conn, size_t count ) {
 	size_t bufsiz = count * sizeof(uint8_t);
 	uint8_t *buf = realloc(conn->buf, bufsiz);

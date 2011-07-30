@@ -67,8 +67,6 @@ shoes_rc_t shoes_set_command( shoes_conn_t *conn, socks_cmd_e cmd );
 shoes_rc_t shoes_set_hostname( shoes_conn_t *conn, const char hostname[static], in_port_t port );
 shoes_rc_t shoes_set_sockaddr( shoes_conn_t *conn, const struct sockaddr *address );
 
-bool shoes_is_connected( shoes_conn_t *conn );
-
 shoes_rc_t shoes_handshake( shoes_conn_t *conn, int sockfd );
 
 #endif
