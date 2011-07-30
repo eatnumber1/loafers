@@ -67,7 +67,7 @@ const char *shoes_strerror( shoes_rc_t err ) {
 		case SHOES_ERR_SOCKS:
 			return socks_strerror(err.socks_errno);
 		default: {
-			static const char *errors[] = {
+			static const char *errors[static const] = {
 				[SHOES_ERR_NOERR] = "No error",
 				[SHOES_ERR_BADPACKET] = "Bad packet",
 				[SHOES_ERR_EOF] = "Premature EOF",
