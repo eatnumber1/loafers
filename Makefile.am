@@ -15,7 +15,7 @@ pkgconfig_DATA = shoes.pc
 
 .PHONY: examples
 
-all-local:
+all-local: libshoes.la
 	$(MAKE) -C examples
 
 clean-local:
