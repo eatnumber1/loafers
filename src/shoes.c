@@ -344,7 +344,7 @@ static shoes_rc_t shoes_conn_version_prepare( shoes_conn_t *conn, int sockfd ) {
 	uint8_t *buf = conn->buf;
 	buf[0] = ver->ver;
 	buf[1] = ver->nmethods;
-	for( int i = 0; i < ver->nmethods; i++ )
+	for( uint8_t i = 0; i < ver->nmethods; i++ )
 		buf[i + 2] = ver->methods[i];
 	conn->state = SHOES_CONN_VERSION_SENDING;
 	return shoes_rc(SHOES_ERR_NOERR);
