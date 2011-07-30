@@ -45,8 +45,10 @@ typedef enum {
 // This must be deep-copiable with simple assignment (no pointers!)
 typedef struct {
 	shoes_err_e code;
-	int sys_errno;
-	shoes_err_socks_e socks_errno;
+	union {
+		int sys_errno;
+		shoes_err_socks_e socks_errno;
+	};
 } shoes_rc_t;
 
 struct _shoes_conn_t;
