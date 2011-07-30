@@ -26,7 +26,8 @@ typedef enum {
 	SHOES_ERR_NEED_READ,
 	SHOES_ERR_NEED_WRITE,
 	SHOES_ERR_ERRNO,
-	SHOES_ERR_SOCKS
+	SHOES_ERR_SOCKS,
+	SHOES_ERR_BADSTATE
 } shoes_err_e;
 
 typedef enum {

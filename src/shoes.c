@@ -7,81 +7,10 @@
 #include <netinet/in.h>
 #include <unistd.h>
 
-#include "shoes.h"
-
 #include "config.h"
 
-typedef enum {
-	SOCKS_ATYP_UNINIT = 0x00,
-	SOCKS_ATYP_IPV4 = 0x01,
-	SOCKS_ATYP_HOSTNAME = 0x03,
-	SOCKS_ATYP_IPV6 = 0x04
-} socks_atyp_e;
-
-typedef struct {
-	socks_version_e ver;
-	uint8_t nmethods;
-	socks_method_e *methods;
-} socks_version_t;
-
-typedef struct {
-	socks_version_e ver;
-	socks_method_e method;
-} socks_methodsel_t;
-
-typedef struct {
-	struct in_addr *ip4;
-	struct in6_addr *ip6;
-	char *hostname;
-} socks_addr_u;
-
-typedef struct {
-	socks_version_e ver;
-	socks_cmd_e cmd;
-	socks_atyp_e atyp;
-	in_port_t dst_port;
-	socks_addr_u dst_addr;
-	size_t addrsiz;
-} socks_request_t;
-
-typedef struct {
-	socks_version_e ver;
-	shoes_err_socks_e rep;
-	socks_atyp_e atyp;
-	in_port_t bnd_port;
-	socks_addr_u bnd_addr;
-} socks_reply_t;
-
-typedef enum {
-	SHOES_CONN_UNPREPARED,
-	SHOES_CONN_VERSION_PREPARE,
-	SHOES_CONN_VERSION_SENDING,
-	SHOES_CONN_METHODSEL_PREPARE,
-	SHOES_CONN_METHODSEL_READING,
-	SHOES_CONN_REQUEST_PREPARE,
-	SHOES_CONN_REQUEST_SENDING,
-	SHOES_CONN_REPLY_HEADER_PREPARE,
-	SHOES_CONN_REPLY_HEADER_READING,
-	SHOES_CONN_REPLY_HEADER_HOSTLEN_PREPARE,
-	SHOES_CONN_REPLY_HEADER_HOSTLEN_READING,
-	SHOES_CONN_REPLY_PREPARE,
-	SHOES_CONN_REPLY_READING,
-	SHOES_CONN_CONNECTED,
-	SHOES_CONN_INVALID
-} shoes_conn_e;
-
-struct _shoes_conn_t {
-	socks_version_t ver;
-	socks_request_t req;
-	socks_reply_t reply;
-	size_t addrsiz;
-	// Connection state information
-	shoes_conn_e state;
-	uint8_t *buf, *bufptr;
-	size_t bufremain;
-	// For passing information between states.
-	void *data;
-};
+#include "shoes.h"
+#include "_shoes.h"
 
 shoes_err_e shoes_errno( shoes_rc_t err ) {
 	return err.code;
@@ -145,7 +74,8 @@ const char *shoes_strerror( shoes_rc_t err ) {
 				[SHOES_ERR_NEED_READ] = "Handshake needs read",
 				[SHOES_ERR_NEED_WRITE] = "Handshake needs write",
 				[SHOES_ERR_ERRNO] = "System error",
-				[SHOES_ERR_SOCKS] = "Protocol error"
+				[SHOES_ERR_SOCKS] = "Protocol error",
+				[SHOES_ERR_BADSTATE] = "Invalid state machine"
 			};
 			static const size_t noerrors = sizeof(errors) / sizeof(char *);
 			shoes_err_e errnum = shoes_errno(err);
@@ -431,6 +361,204 @@ static shoes_rc_t shoes_read( int fd, shoes_conn_t *conn ) {
 	return rc;
 }
 
+static shoes_rc_t shoes_conn_version_prepare( shoes_conn_t *conn, int sockfd ) {
+	(void) sockfd;
+	shoes_rc_t rc;
+	socks_version_t *ver = &conn->ver;
+	if( shoes_errno(rc = shoes_connbuf_alloc(conn, ver->nmethods + (2 * sizeof(uint8_t)))) != SHOES_ERR_NOERR ) return rc;
+	uint8_t *buf = conn->buf;
+	buf[0] = ver->ver;
+	buf[1] = ver->nmethods;
+	for( int i = 0; i < ver->nmethods; i++ )
+		buf[i + 2] = ver->methods[i];
+	conn->state = SHOES_CONN_VERSION_SENDING;
+	return shoes_rc(SHOES_ERR_NOERR);
+}
+
+static shoes_rc_t shoes_conn_version_sending( shoes_conn_t *conn, int sockfd ) {
+	shoes_rc_t rc;
+	if( shoes_errno(rc = shoes_write(sockfd, conn)) != SHOES_ERR_NOERR ) return rc;
+	conn->state = SHOES_CONN_METHODSEL_PREPARE;
+	return shoes_rc(SHOES_ERR_NOERR);
+}
+
+static shoes_rc_t shoes_conn_methodsel_prepare( shoes_conn_t *conn, int sockfd ) {
+	(void) sockfd;
+	shoes_rc_t rc;
+	if( shoes_errno(rc = shoes_connbuf_alloc(conn, 2 * sizeof(uint8_t))) != SHOES_ERR_NOERR ) return rc;
+	conn->state = SHOES_CONN_METHODSEL_READING;
+	return shoes_rc(SHOES_ERR_NOERR);
+}
+
+static shoes_rc_t shoes_conn_methodsel_reading( shoes_conn_t *conn, int sockfd ) {
+	shoes_rc_t rc;
+	if( shoes_errno(rc = shoes_read(sockfd, conn)) != SHOES_ERR_NOERR ) return rc;
+	if( conn->buf[0] != conn->ver.ver ) {
+		conn->state = SHOES_CONN_INVALID;
+		return shoes_rc(SHOES_ERR_BADPACKET);
+	}
+	conn->state = SHOES_CONN_REQUEST_PREPARE;
+	return shoes_rc(SHOES_ERR_NOERR);
+}
+
+static shoes_rc_t shoes_conn_request_prepare( shoes_conn_t *conn, int sockfd ) {
+	(void) sockfd;
+	shoes_rc_t rc;
+	socks_request_t *req = &conn->req;
+	size_t addrsiz = req->addrsiz;
+	if( shoes_errno(rc = shoes_connbuf_alloc(conn, addrsiz + (4 * sizeof(uint8_t)) + sizeof(uint16_t))) != SHOES_ERR_NOERR ) return rc;
+	uint8_t *buf = conn->buf;
+	buf[0] = req->ver;
+	buf[1] = req->cmd;
+	buf[2] = 0x00;
+	buf[3] = req->atyp;
+	uint8_t *bufptr = buf + 4;
+	switch( req->atyp ) {
+		case SOCKS_ATYP_IPV6:
+			memcpy(bufptr, req->dst_addr.ip6, addrsiz);
+			break;
+		case SOCKS_ATYP_IPV4:
+			memcpy(bufptr, req->dst_addr.ip4, addrsiz);
+			break;
+		case SOCKS_ATYP_HOSTNAME: {
+			*(bufptr++) = --addrsiz;
+			memcpy(bufptr, req->dst_addr.hostname, addrsiz);
+			break;
+		}
+		default:
+			assert(false);
+			errno = EINVAL;
+			return shoes_rc_sys();
+	}
+	bufptr += addrsiz;
+	memcpy(bufptr, &req->dst_port, sizeof(uint16_t));
+	conn->state = SHOES_CONN_REQUEST_SENDING;
+	return shoes_rc(SHOES_ERR_NOERR);
+}
+
+static shoes_rc_t shoes_conn_request_sending( shoes_conn_t *conn, int sockfd ) {
+	shoes_rc_t rc;
+	if( shoes_errno(rc = shoes_write(sockfd, conn)) != SHOES_ERR_NOERR ) return rc;
+	conn->state = SHOES_CONN_REPLY_HEADER_PREPARE;
+	return shoes_rc(SHOES_ERR_NOERR);
+}
+
+static shoes_rc_t shoes_conn_reply_header_prepare( shoes_conn_t *conn, int sockfd ) {
+	(void) sockfd;
+	shoes_rc_t rc;
+	if( shoes_errno(rc = shoes_connbuf_alloc(conn, 4 * sizeof(uint8_t))) != SHOES_ERR_NOERR ) return rc;
+	if( (conn->data = realloc(conn->data, sizeof(uint8_t))) == NULL ) return shoes_rc_sys();
+	conn->state = SHOES_CONN_REPLY_HEADER_READING;
+	return shoes_rc(SHOES_ERR_NOERR);
+}
+
+static shoes_rc_t shoes_conn_reply_header_reading( shoes_conn_t *conn, int sockfd ) {
+	shoes_rc_t rc;
+	if( shoes_errno(rc = shoes_read(sockfd, conn)) != SHOES_ERR_NOERR ) return rc;
+	conn->reply.ver = conn->buf[0];
+	conn->reply.rep = conn->buf[1];
+	assert(conn->buf[2] == 0x00);
+	conn->reply.atyp = conn->buf[3];
+	if( conn->reply.ver != conn->req.ver ) {
+		conn->state = SHOES_CONN_INVALID;
+		return shoes_rc(SHOES_ERR_BADPACKET);
+	}
+	if( conn->reply.rep != SOCKS_ERR_NOERR ) {
+		conn->state = SHOES_CONN_INVALID;
+		return shoes_rc_socks(SHOES_ERR_SOCKS, conn->reply.rep);
+	}
+	uint8_t *addrsiz = (uint8_t *) conn->data;
+	switch( conn->reply.atyp ) {
+		case SOCKS_ATYP_IPV6:
+			*addrsiz = 16;
+			conn->state = SHOES_CONN_REPLY_PREPARE;
+			break;
+		case SOCKS_ATYP_IPV4:
+			*addrsiz = 4;
+			conn->state = SHOES_CONN_REPLY_PREPARE;
+			break;
+		case SOCKS_ATYP_HOSTNAME:
+			conn->state = SHOES_CONN_REPLY_HEADER_HOSTLEN_PREPARE;
+			break;
+		default:
+			assert(false);
+			errno = EINVAL;
+			return shoes_rc_sys();
+	}
+	return shoes_rc(SHOES_ERR_NOERR);
+}
+
+static shoes_rc_t shoes_conn_reply_header_hostlen_prepare( shoes_conn_t *conn, int sockfd ) {
+	(void) sockfd;
+	shoes_rc_t rc;
+	if( shoes_errno(rc = shoes_connbuf_alloc(conn, sizeof(uint8_t))) != SHOES_ERR_NOERR ) return rc;
+	conn->state = SHOES_CONN_REPLY_HEADER_HOSTLEN_READING;
+	return shoes_rc(SHOES_ERR_NOERR);
+}
+
+static shoes_rc_t shoes_conn_reply_header_hostlen_reading( shoes_conn_t *conn, int sockfd ) {
+	shoes_rc_t rc;
+	if( shoes_errno(rc = shoes_read(sockfd, conn)) != SHOES_ERR_NOERR ) return rc;
+	*((uint8_t *) conn->data) = conn->buf[0];
+	conn->state = SHOES_CONN_REPLY_PREPARE;
+	return shoes_rc(SHOES_ERR_NOERR);
+}
+
+static shoes_rc_t shoes_conn_reply_prepare( shoes_conn_t *conn, int sockfd ) {
+	(void) sockfd;
+	shoes_rc_t rc;
+	uint8_t buflen = *((uint8_t *) conn->data);
+	if( shoes_errno(rc = shoes_connbuf_alloc(conn, buflen + sizeof(uint16_t))) != SHOES_ERR_NOERR ) return rc;
+	if( conn->reply.atyp == SOCKS_ATYP_HOSTNAME ) buflen++;
+	void *bnd_addr;
+	if( (bnd_addr = malloc(buflen)) == NULL ) return shoes_rc_sys();
+	switch( conn->reply.atyp ) {
+		case SOCKS_ATYP_IPV6:
+			conn->reply.bnd_addr.ip6 = (struct in6_addr *) bnd_addr;
+			break;
+		case SOCKS_ATYP_IPV4:
+			conn->reply.bnd_addr.ip4 = (struct in_addr *) bnd_addr;
+			break;
+		case SOCKS_ATYP_HOSTNAME:
+			conn->reply.bnd_addr.hostname = (char *) bnd_addr;
+			conn->reply.bnd_addr.hostname[buflen] = '\0';
+			break;
+		default:
+			free(bnd_addr);
+			assert(false);
+			errno = EINVAL;
+			return shoes_rc_sys();
+	}
+	conn->state = SHOES_CONN_REPLY_READING;
+	return shoes_rc(SHOES_ERR_NOERR);
+}
+
+static shoes_rc_t shoes_conn_reply_reading( shoes_conn_t *conn, int sockfd ) {
+	shoes_rc_t rc;
+	uint8_t buflen = *((uint8_t *) conn->data);
+	if( shoes_errno(rc = shoes_read(sockfd, conn)) != SHOES_ERR_NOERR ) return rc;
+	void *s1;
+	switch( conn->reply.atyp ) {
+		case SOCKS_ATYP_IPV6:
+			s1 = conn->reply.bnd_addr.ip6;
+			break;
+		case SOCKS_ATYP_IPV4:
+			s1 = conn->reply.bnd_addr.ip4;
+			break;
+		case SOCKS_ATYP_HOSTNAME:
+			s1 = conn->reply.bnd_addr.hostname;
+			break;
+		default:
+			assert(false);
+			errno = EINVAL;
+			return shoes_rc_sys();
+	}
+	memcpy(s1, conn->buf, buflen);
+	conn->reply.bnd_port = ntohl(*((in_port_t *) &conn->buf[buflen]));
+	conn->state = SHOES_CONN_CONNECTED;
+	return shoes_rc(SHOES_ERR_NOERR);
+}
+
 shoes_rc_t shoes_handshake( shoes_conn_t *conn, int sockfd ) {
 	if( conn == NULL ) {
 		assert(false);
@@ -438,175 +566,10 @@ shoes_rc_t shoes_handshake( shoes_conn_t *conn, int sockfd ) {
 		return shoes_rc_sys();
 	}
 
-	shoes_rc_t rc;
 	while( conn->state != SHOES_CONN_CONNECTED ) {
-		switch( conn->state ) {
-			case SHOES_CONN_VERSION_PREPARE: {
-				socks_version_t *ver = &conn->ver;
-				if( shoes_errno(rc = shoes_connbuf_alloc(conn, ver->nmethods + (2 * sizeof(uint8_t)))) != SHOES_ERR_NOERR ) return rc;
-				uint8_t *buf = conn->buf;
-				buf[0] = ver->ver;
-				buf[1] = ver->nmethods;
-				for( int i = 0; i < ver->nmethods; i++ )
-					buf[i + 2] = ver->methods[i];
-				conn->state = SHOES_CONN_VERSION_SENDING;
-			}
-			case SHOES_CONN_VERSION_SENDING: {
-				if( shoes_errno(rc = shoes_write(sockfd, conn)) != SHOES_ERR_NOERR ) return rc;
-				conn->state = SHOES_CONN_METHODSEL_PREPARE;
-			}
-			case SHOES_CONN_METHODSEL_PREPARE: {
-				if( shoes_errno(rc = shoes_connbuf_alloc(conn, 2 * sizeof(uint8_t))) != SHOES_ERR_NOERR ) return rc;
-				conn->state = SHOES_CONN_METHODSEL_READING;
-			}
-			case SHOES_CONN_METHODSEL_READING: {
-				if( shoes_errno(rc = shoes_read(sockfd, conn)) != SHOES_ERR_NOERR ) return rc;
-				if( conn->buf[0] != conn->ver.ver ) {
-					conn->state = SHOES_CONN_INVALID;
-					return shoes_rc(SHOES_ERR_BADPACKET);
-				}
-				conn->state = SHOES_CONN_REQUEST_PREPARE;
-			}
-			case SHOES_CONN_REQUEST_PREPARE: {
-				socks_request_t *req = &conn->req;
-				size_t addrsiz = req->addrsiz;
-				if( shoes_errno(rc = shoes_connbuf_alloc(conn, addrsiz + (4 * sizeof(uint8_t)) + sizeof(uint16_t))) != SHOES_ERR_NOERR ) return rc;
-				uint8_t *buf = conn->buf;
-				buf[0] = req->ver;
-				buf[1] = req->cmd;
-				buf[2] = 0x00;
-				buf[3] = req->atyp;
-				uint8_t *bufptr = buf + 4;
-				switch( req->atyp ) {
-					case SOCKS_ATYP_IPV6:
-						memcpy(bufptr, req->dst_addr.ip6, addrsiz);
-						break;
-					case SOCKS_ATYP_IPV4:
-						memcpy(bufptr, req->dst_addr.ip4, addrsiz);
-						break;
-					case SOCKS_ATYP_HOSTNAME: {
-						*(bufptr++) = --addrsiz;
-						memcpy(bufptr, req->dst_addr.hostname, addrsiz);
-						break;
-					}
-					default:
-						assert(false);
-						errno = EINVAL;
-						return shoes_rc_sys();
-				}
-				bufptr += addrsiz;
-				memcpy(bufptr, &req->dst_port, sizeof(uint16_t));
-				conn->state = SHOES_CONN_REQUEST_SENDING;
-			}
-			case SHOES_CONN_REQUEST_SENDING: {
-				if( shoes_errno(rc = shoes_write(sockfd, conn)) != SHOES_ERR_NOERR ) return rc;
-				conn->state = SHOES_CONN_REPLY_HEADER_PREPARE;
-			}
-			case SHOES_CONN_REPLY_HEADER_PREPARE: {
-				if( shoes_errno(rc = shoes_connbuf_alloc(conn, 4 * sizeof(uint8_t))) != SHOES_ERR_NOERR ) return rc;
-				if( (conn->data = realloc(conn->data, sizeof(uint8_t))) == NULL ) return shoes_rc_sys();
-				conn->state = SHOES_CONN_REPLY_HEADER_READING;
-			}
-			case SHOES_CONN_REPLY_HEADER_READING: {
-				if( shoes_errno(rc = shoes_read(sockfd, conn)) != SHOES_ERR_NOERR ) return rc;
-				conn->reply.ver = conn->buf[0];
-				conn->reply.rep = conn->buf[1];
-				assert(conn->buf[2] == 0x00);
-				conn->reply.atyp = conn->buf[3];
-				if( conn->reply.ver != conn->req.ver ) {
-					conn->state = SHOES_CONN_INVALID;
-					return shoes_rc(SHOES_ERR_BADPACKET);
-				}
-				if( conn->reply.rep != SOCKS_ERR_NOERR ) {
-					conn->state = SHOES_CONN_INVALID;
-					return shoes_rc_socks(SHOES_ERR_SOCKS, conn->reply.rep);
-				}
-				uint8_t *addrsiz = (uint8_t *) conn->data;
-				switch( conn->reply.atyp ) {
-					case SOCKS_ATYP_IPV6:
-						*addrsiz = 16;
-						conn->state = SHOES_CONN_REPLY_PREPARE;
-						break;
-					case SOCKS_ATYP_IPV4:
-						*addrsiz = 4;
-						conn->state = SHOES_CONN_REPLY_PREPARE;
-						break;
-					case SOCKS_ATYP_HOSTNAME:
-						conn->state = SHOES_CONN_REPLY_HEADER_HOSTLEN_PREPARE;
-						break;
-					default:
-						assert(false);
-						errno = EINVAL;
-						return shoes_rc_sys();
-				}
-				break;
-			}
-			case SHOES_CONN_REPLY_HEADER_HOSTLEN_PREPARE: {
-				if( shoes_errno(rc = shoes_connbuf_alloc(conn, sizeof(uint8_t))) != SHOES_ERR_NOERR ) return rc;
-				conn->state = SHOES_CONN_REPLY_HEADER_HOSTLEN_READING;
-			}
-			case SHOES_CONN_REPLY_HEADER_HOSTLEN_READING: {
-				if( shoes_errno(rc = shoes_read(sockfd, conn)) != SHOES_ERR_NOERR ) return rc;
-				*((uint8_t *) conn->data) = conn->buf[0];
-				conn->state = SHOES_CONN_REPLY_PREPARE;
-			}
-			case SHOES_CONN_REPLY_PREPARE: {
-				uint8_t buflen = *((uint8_t *) conn->data);
-				if( shoes_errno(rc = shoes_connbuf_alloc(conn, buflen + sizeof(uint16_t))) != SHOES_ERR_NOERR ) return rc;
-				if( conn->reply.atyp == SOCKS_ATYP_HOSTNAME ) buflen++;
-				void *bnd_addr;
-				if( (bnd_addr = malloc(buflen)) == NULL ) return shoes_rc_sys();
-				switch( conn->reply.atyp ) {
-					case SOCKS_ATYP_IPV6:
-						conn->reply.bnd_addr.ip6 = (struct in6_addr *) bnd_addr;
-						break;
-					case SOCKS_ATYP_IPV4:
-						conn->reply.bnd_addr.ip4 = (struct in_addr *) bnd_addr;
-						break;
-					case SOCKS_ATYP_HOSTNAME:
-						conn->reply.bnd_addr.hostname = (char *) bnd_addr;
-						conn->reply.bnd_addr.hostname[buflen] = '\0';
-						break;
-					default:
-						free(bnd_addr);
-						assert(false);
-						errno = EINVAL;
-						return shoes_rc_sys();
-				}
-				conn->state = SHOES_CONN_REPLY_READING;
-			}
-			case SHOES_CONN_REPLY_READING: {
-				uint8_t buflen = *((uint8_t *) conn->data);
-				if( shoes_errno(rc = shoes_read(sockfd, conn)) != SHOES_ERR_NOERR ) return rc;
-				void *s1;
-				switch( conn->reply.atyp ) {
-					case SOCKS_ATYP_IPV6:
-						s1 = conn->reply.bnd_addr.ip6;
-						break;
-					case SOCKS_ATYP_IPV4:
-						s1 = conn->reply.bnd_addr.ip4;
-						break;
-					case SOCKS_ATYP_HOSTNAME:
-						s1 = conn->reply.bnd_addr.hostname;
-						break;
-					default:
-						assert(false);
-						errno = EINVAL;
-						return shoes_rc_sys();
-				}
-				memcpy(s1, conn->buf, buflen);
-				conn->reply.bnd_port = ntohl(*((in_port_t *) &conn->buf[buflen]));
-				conn->state = SHOES_CONN_CONNECTED;
-				break;
-			}
-			case SHOES_CONN_UNPREPARED:
-			case SHOES_CONN_INVALID:
-			default: {
-				assert(false);
-				errno = EINVAL;
-				return shoes_rc_sys();
-			}
-		}
+		if( conn->state >= shoes_nostates ) return shoes_rc(SHOES_ERR_BADSTATE);
+		shoes_rc_t rc = shoes_state_handlers[conn->state](conn, sockfd);
+		if( shoes_errno(rc) != SHOES_ERR_NOERR ) return rc;
 	}
 	return shoes_rc(SHOES_ERR_NOERR);
 }

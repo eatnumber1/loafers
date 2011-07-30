@@ -10,6 +10,8 @@ libshoes_la_LDFLAGS = -no-undefined -version-info 0:0:0
 libshoes_la_includedir = $(includedir)
 libshoes_la_include_HEADERS = include/shoes.h
 
+noinst_HEADERS = include/_shoes.h
+
 pkgconfigdir = $(libdir)/pkgconfig
 pkgconfig_DATA = shoes.pc
 
