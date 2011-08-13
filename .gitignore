@@ -20,10 +20,10 @@ libtool
 ltmain.sh
 m4/
 missing
-shoes.pc
+loafers.pc
 stamp-h1
 .libs/
-libshoes.la
-libshoes_la-shoes.lo
+libloafers.la
+libloafers_la-loafers.lo
 *.dSYM/
 config.cache

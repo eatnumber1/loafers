@@ -2,8 +2,8 @@
 # Process this file with autoconf to produce a configure script.
 
 AC_PREREQ([2.61])
-AC_INIT([shoes], [0.1], [russ@eatnumber1.com])
-AC_CONFIG_SRCDIR([include/shoes.h])
+AC_INIT([loafers], [0.1], [russ@eatnumber1.com])
+AC_CONFIG_SRCDIR([include/loafers.h])
 AC_CONFIG_HEADERS([config.h])
 AC_CONFIG_MACRO_DIR([m4])
 AM_INIT_AUTOMAKE([foreign])
@@ -23,5 +23,5 @@ AC_TYPE_UINT8_T
 AC_FUNC_MALLOC
 AC_CHECK_FUNCS([bzero dup2 socket strdup])
 
-AC_CONFIG_FILES([Makefile examples/Makefile shoes.pc])
+AC_CONFIG_FILES([Makefile examples/Makefile loafers.pc])
 AC_OUTPUT

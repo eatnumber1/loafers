@@ -3,9 +3,9 @@ exec_prefix=@exec_prefix@
 libdir=@libdir@
 includedir=@includedir@
 
-Name: shoes
+Name: loafers
 Description: A SOCKS client library
 Requires:
 Version: @PACKAGE_VERSION@
-Libs: -L${libdir} -lshoes
+Libs: -L${libdir} -lloafers
 Cflags: -I${includedir}

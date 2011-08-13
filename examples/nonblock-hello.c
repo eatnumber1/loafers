@@ -9,7 +9,7 @@
 #include <errno.h>
 #include <sys/select.h>
 
-#include <shoes.h>
+#include <loafers.h>
 
 int main( int argc, char *argv[] ) {
 	if( argc != 5 ) {
@@ -52,32 +52,32 @@ int main( int argc, char *argv[] ) {
 		exit(EXIT_FAILURE);
 	}
 
-	shoes_conn_t *conn;
-	shoes_rc_t rc;
-	if( shoes_errno(rc = shoes_conn_alloc(&conn)) != SHOES_ERR_NOERR ) {
-		fprintf(stderr, "shoes_alloc: %s\n", shoes_strerror(rc));
-		shoes_conn_free(conn);
+	loafers_conn_t *conn;
+	loafers_rc_t rc;
+	if( loafers_errno(rc = loafers_conn_alloc(&conn)) != LOAFERS_ERR_NOERR ) {
+		fprintf(stderr, "loafers_alloc: %s\n", loafers_strerror(rc));
+		loafers_conn_free(conn);
 		exit(EXIT_FAILURE);
 	}
-	if( shoes_errno(rc = shoes_set_version(conn, SOCKS_VERSION_5)) != SHOES_ERR_NOERR ) {
-		fprintf(stderr, "shoes_set_version: %s\n", shoes_strerror(rc));
-		shoes_conn_free(conn);
+	if( loafers_errno(rc = loafers_set_version(conn, SOCKS_VERSION_5)) != LOAFERS_ERR_NOERR ) {
+		fprintf(stderr, "loafers_set_version: %s\n", loafers_strerror(rc));
+		loafers_conn_free(conn);
 		exit(EXIT_FAILURE);
 	}
 	socks_method_e methods[] = { SOCKS_METHOD_NONE };
-	if( shoes_errno(rc = shoes_set_methods(conn, 1, methods)) != SHOES_ERR_NOERR ) {
-		fprintf(stderr, "shoes_set_methods: %s\n", shoes_strerror(rc));
-		shoes_conn_free(conn);
+	if( loafers_errno(rc = loafers_set_methods(conn, 1, methods)) != LOAFERS_ERR_NOERR ) {
+		fprintf(stderr, "loafers_set_methods: %s\n", loafers_strerror(rc));
+		loafers_conn_free(conn);
 		exit(EXIT_FAILURE);
 	}
-	if( shoes_errno(rc = shoes_set_command(conn, SOCKS_CMD_CONNECT)) != SHOES_ERR_NOERR ) {
-		fprintf(stderr, "shoes_set_command: %s\n", shoes_strerror(rc));
-		shoes_conn_free(conn);
+	if( loafers_errno(rc = loafers_set_command(conn, SOCKS_CMD_CONNECT)) != LOAFERS_ERR_NOERR ) {
+		fprintf(stderr, "loafers_set_command: %s\n", loafers_strerror(rc));
+		loafers_conn_free(conn);
 		exit(EXIT_FAILURE);
 	}
-	if( shoes_errno(rc = shoes_set_hostname(conn, argv[3], htons(atoi(argv[4])))) != SHOES_ERR_NOERR ) {
-		fprintf(stderr, "shoes_set_hostname: %s\n", shoes_strerror(rc));
-		shoes_conn_free(conn);
+	if( loafers_errno(rc = loafers_set_hostname(conn, argv[3], htons(atoi(argv[4])))) != LOAFERS_ERR_NOERR ) {
+		fprintf(stderr, "loafers_set_hostname: %s\n", loafers_strerror(rc));
+		loafers_conn_free(conn);
 		exit(EXIT_FAILURE);
 	}
 
@@ -86,32 +86,32 @@ int main( int argc, char *argv[] ) {
 	FD_ZERO(&wfds);
 	FD_SET(sock, &rfds);
 	FD_SET(sock, &wfds);
-	shoes_err_e code;
+	loafers_err_e code;
 	do {
-		switch( code = shoes_errno(rc = shoes_handshake(conn, sock)) ) {
-			case SHOES_ERR_NOERR:
+		switch( code = loafers_errno(rc = loafers_handshake(conn, sock)) ) {
+			case LOAFERS_ERR_NOERR:
 				break;
-			case SHOES_ERR_NEED_WRITE:
+			case LOAFERS_ERR_NEED_WRITE:
 				if( select(sock + 1, NULL, &wfds, NULL, NULL) == -1 ) {
 					perror("select");
 					exit(EXIT_FAILURE);
 				}
 				break;
-			case SHOES_ERR_NEED_READ:
+			case LOAFERS_ERR_NEED_READ:
 				if( select(sock + 1, &rfds, NULL, NULL, NULL) == -1 ) {
 					perror("select");
 					exit(EXIT_FAILURE);
 				}
 				break;
 			default:
-				fprintf(stderr, "shoes_handshake: %s\n", shoes_strerror(rc));
-				shoes_conn_free(conn);
+				fprintf(stderr, "loafers_handshake: %s\n", loafers_strerror(rc));
+				loafers_conn_free(conn);
 				exit(EXIT_FAILURE);
 		}
-	} while( code != SHOES_ERR_NOERR );
+	} while( code != LOAFERS_ERR_NOERR );
 
-	if( shoes_errno(rc = shoes_conn_free(conn)) != SHOES_ERR_NOERR ) {
-		fprintf(stderr, "shoes_conn_free: %s\n", shoes_strerror(rc));
+	if( loafers_errno(rc = loafers_conn_free(conn)) != LOAFERS_ERR_NOERR ) {
+		fprintf(stderr, "loafers_conn_free: %s\n", loafers_strerror(rc));
 		exit(EXIT_FAILURE);
 	}
 
