@@ -92,8 +92,6 @@ static loafers_rc_t loafers_conn_reply_header_hostlen_reading( loafers_conn_t *c
 static loafers_rc_t loafers_conn_reply_prepare( loafers_conn_t *conn, int sockfd );
 static loafers_rc_t loafers_conn_reply_reading( loafers_conn_t *conn, int sockfd );
 
-static void loafers_free( void *ptr );
-
 typedef loafers_rc_t (*loafers_state_handler)( loafers_conn_t *, int );
 static const loafers_state_handler loafers_state_handlers[] = {
 	[LOAFERS_CONN_VERSION_PREPARE] = loafers_conn_version_prepare,

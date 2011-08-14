@@ -12,11 +12,6 @@
 #include "loafers.h"
 #include "_loafers.h"
 
-static void loafers_free( void *ptr ) {
-	free(ptr);
-	ptr = NULL;
-}
-
 loafers_err_e loafers_errno( loafers_rc_t err ) {
 	return err.code;
 }
@@ -124,13 +119,13 @@ static loafers_rc_t loafers_free_addr_u( socks_atyp_e atyp, socks_addr_u addr ) 
 		case SOCKS_ATYP_UNINIT:
 			break;
 		case SOCKS_ATYP_IPV6:
-			if( addr.ip6 != NULL ) loafers_free(addr.ip6);
+			if( addr.ip6 != NULL ) free(addr.ip6);
 			break;
 		case SOCKS_ATYP_IPV4:
-			if( addr.ip4 != NULL ) loafers_free(addr.ip4);
+			if( addr.ip4 != NULL ) free(addr.ip4);
 			break;
 		case SOCKS_ATYP_HOSTNAME:
-			if( addr.hostname != NULL ) loafers_free(addr.hostname);
+			if( addr.hostname != NULL ) free(addr.hostname);
 			break;
 		default:
 			assert(false);
@@ -154,18 +149,20 @@ loafers_rc_t loafers_conn_alloc( loafers_conn_t **conn ) {
 	return loafers_rc(LOAFERS_ERR_NOERR);
 }
 
-loafers_rc_t loafers_conn_free( loafers_conn_t *conn ) {
-	if( conn == NULL ) {
+loafers_rc_t loafers_conn_free( loafers_conn_t **conn ) {
+	if( conn == NULL || *conn == NULL ) {
 		assert(false);
 		errno = EINVAL;
 		return loafers_rc_sys();
 	}
-	if( conn->ver.methods != NULL ) loafers_free(conn->ver.methods);
-	if( conn->buf != NULL ) loafers_free(conn->buf);
-	if( conn->data != NULL ) loafers_free(conn->data);
-	loafers_rc_t rc = loafers_free_addr_u(conn->req.atyp, conn->req.dst_addr);
-	loafers_rc_t rc2 = loafers_free_addr_u(conn->reply.atyp, conn->reply.bnd_addr);
-	loafers_free(conn);
+	loafers_conn_t *c = *conn;
+	if( c->ver.methods != NULL ) free(c->ver.methods);
+	if( c->buf != NULL ) free(c->buf);
+	if( c->data != NULL ) free(c->data);
+	loafers_rc_t rc = loafers_free_addr_u(c->req.atyp, c->req.dst_addr);
+	loafers_rc_t rc2 = loafers_free_addr_u(c->reply.atyp, c->reply.bnd_addr);
+	free(c);
+	*conn = NULL;
 	if( loafers_errno(rc) != LOAFERS_ERR_NOERR ) return rc;
 	if( loafers_errno(rc2) != LOAFERS_ERR_NOERR ) return rc2;
 	return loafers_rc(LOAFERS_ERR_NOERR);
@@ -201,7 +198,7 @@ loafers_rc_t loafers_set_methods( loafers_conn_t *conn, uint8_t nmethods, const 
 		return loafers_rc_sys();
 	}
 
-	if( conn->ver.methods != NULL ) loafers_free(conn->ver.methods);
+	if( conn->ver.methods != NULL ) free(conn->ver.methods);
 	conn->ver.methods = calloc(sizeof(socks_method_e), nmethods);
 	if( conn->ver.methods == NULL ) return loafers_rc_sys();
 	memcpy(conn->ver.methods, methods, nmethods * sizeof(socks_method_e));
@@ -245,7 +242,7 @@ loafers_rc_t loafers_set_hostname( loafers_conn_t *conn, const char *hostname, i
 	loafers_rc_t rc = loafers_set_atyp(conn, SOCKS_ATYP_HOSTNAME);
 	if( loafers_errno(rc) != LOAFERS_ERR_NOERR ) return rc;
 	req->dst_port = port;
-	if( req->dst_addr.hostname != NULL ) loafers_free(req->dst_addr.hostname);
+	if( req->dst_addr.hostname != NULL ) free(req->dst_addr.hostname);
 	req->addrsiz = (strlen(hostname) + 1) * sizeof(char);
 	req->dst_addr.hostname = malloc(req->addrsiz);
 	if( req->dst_addr.hostname == NULL ) return loafers_rc_sys();
@@ -268,7 +265,7 @@ loafers_rc_t loafers_set_sockaddr( loafers_conn_t *conn, const struct sockaddr *
 			if( loafers_errno(rc = loafers_set_atyp(conn, SOCKS_ATYP_IPV4)) != LOAFERS_ERR_NOERR ) return rc;
 			struct sockaddr_in *addr = (struct sockaddr_in *) address;
 			req->dst_port = addr->sin_port;
-			if( req->dst_addr.ip4 != NULL ) loafers_free(req->dst_addr.ip4);
+			if( req->dst_addr.ip4 != NULL ) free(req->dst_addr.ip4);
 			req->addrsiz = sizeof(struct in_addr);
 			req->dst_addr.ip4 = malloc(req->addrsiz);
 			if( req->dst_addr.ip4 == NULL ) return loafers_rc_sys();
@@ -278,7 +275,7 @@ loafers_rc_t loafers_set_sockaddr( loafers_conn_t *conn, const struct sockaddr *
 			if( loafers_errno(rc = loafers_set_atyp(conn, SOCKS_ATYP_IPV6)) != LOAFERS_ERR_NOERR ) return rc;
 			struct sockaddr_in6 *addr6 = (struct sockaddr_in6 *) address;
 			req->dst_port = addr6->sin6_port;
-			if( req->dst_addr.ip6 != NULL ) loafers_free(req->dst_addr.ip6);
+			if( req->dst_addr.ip6 != NULL ) free(req->dst_addr.ip6);
 			req->addrsiz = sizeof(struct in6_addr);
 			req->dst_addr.ip6 = malloc(req->addrsiz);
 			if( req->dst_addr.ip6 == NULL ) return loafers_rc_sys();
@@ -534,7 +531,7 @@ static loafers_rc_t loafers_conn_reply_prepare( loafers_conn_t *conn, int sockfd
 			conn->reply.bnd_addr.hostname[buflen] = '\0';
 			break;
 		default:
-			loafers_free(bnd_addr);
+			free(bnd_addr);
 			assert(false);
 			errno = EINVAL;
 			return loafers_rc_sys();

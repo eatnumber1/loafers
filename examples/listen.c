@@ -20,23 +20,23 @@ loafers_conn_t *make_conn( socks_cmd_e cmd, char *hostname, char *port ) {
 	}
 	if( loafers_errno(rc = loafers_set_version(conn, SOCKS_VERSION_5)) != LOAFERS_ERR_NOERR ) {
 		fprintf(stderr, "loafers_set_version: %s\n", loafers_strerror(rc));
-		loafers_conn_free(conn);
+		loafers_conn_free(&conn);
 		exit(EXIT_FAILURE);
 	}
 	socks_method_e methods[] = { SOCKS_METHOD_NONE };
 	if( loafers_errno(rc = loafers_set_methods(conn, 1, methods)) != LOAFERS_ERR_NOERR ) {
 		fprintf(stderr, "loafers_set_methods: %s\n", loafers_strerror(rc));
-		loafers_conn_free(conn);
+		loafers_conn_free(&conn);
 		exit(EXIT_FAILURE);
 	}
 	if( loafers_errno(rc = loafers_set_command(conn, cmd)) != LOAFERS_ERR_NOERR ) {
 		fprintf(stderr, "loafers_set_command: %s\n", loafers_strerror(rc));
-		loafers_conn_free(conn);
+		loafers_conn_free(&conn);
 		exit(EXIT_FAILURE);
 	}
 	if( loafers_errno(rc = loafers_set_hostname(conn, hostname, htons(atoi(port)))) != LOAFERS_ERR_NOERR ) {
 		fprintf(stderr, "loafers_set_hostname: %s\n", loafers_strerror(rc));
-		loafers_conn_free(conn);
+		loafers_conn_free(&conn);
 		exit(EXIT_FAILURE);
 	}
 	return conn;
@@ -60,10 +60,10 @@ int listen_connect( char *argv[] ) {
 	loafers_rc_t rc;
 	if( loafers_errno(rc = loafers_handshake(conn, sock)) != LOAFERS_ERR_NOERR ) {
 		fprintf(stderr, "loafers_handshake: %s\n", loafers_strerror(rc));
-		loafers_conn_free(conn);
+		loafers_conn_free(&conn);
 		exit(EXIT_FAILURE);
 	}
-	if( loafers_errno(rc = loafers_conn_free(conn)) != LOAFERS_ERR_NOERR ) {
+	if( loafers_errno(rc = loafers_conn_free(&conn)) != LOAFERS_ERR_NOERR ) {
 		fprintf(stderr, "loafers_conn_free: %s\n", loafers_strerror(rc));
 		exit(EXIT_FAILURE);
 	}
@@ -108,7 +108,7 @@ int listen_bind( char *argv[], loafers_conn_t **connptr ) {
 	loafers_rc_t rc;
 	if( loafers_errno(rc = loafers_handshake(conn, sock)) != LOAFERS_ERR_NOERR_BINDWAIT ) {
 		fprintf(stderr, "loafers_handshake: %s\n", loafers_strerror(rc));
-		loafers_conn_free(conn);
+		loafers_conn_free(&conn);
 		exit(EXIT_FAILURE);
 	}
 
@@ -199,10 +199,10 @@ int main( int argc, char *argv[] ) {
 
 	if( loafers_errno(rc = loafers_handshake(conn, bind_sock)) != LOAFERS_ERR_NOERR ) {
 		fprintf(stderr, "loafers_handshake: %s\n", loafers_strerror(rc));
-		loafers_conn_free(conn);
+		loafers_conn_free(&conn);
 		exit(EXIT_FAILURE);
 	}
-	if( loafers_errno(rc = loafers_conn_free(conn)) != LOAFERS_ERR_NOERR ) {
+	if( loafers_errno(rc = loafers_conn_free(&conn)) != LOAFERS_ERR_NOERR ) {
 		fprintf(stderr, "loafers_conn_free: %s\n", loafers_strerror(rc));
 		exit(EXIT_FAILURE);
 	}

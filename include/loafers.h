@@ -74,7 +74,7 @@ int loafers_sys_errno( loafers_rc_t err );
 
 const char *loafers_strerror( loafers_rc_t err );
 loafers_rc_t loafers_conn_alloc( loafers_conn_t **conn );
-loafers_rc_t loafers_conn_free( loafers_conn_t *conn );
+loafers_rc_t loafers_conn_free( loafers_conn_t **conn );
 loafers_rc_t loafers_set_version( loafers_conn_t *conn, socks_version_e version );
 loafers_rc_t loafers_set_methods( loafers_conn_t *conn, uint8_t nmethods, const socks_method_e methods[static nmethods] );
 loafers_rc_t loafers_set_command( loafers_conn_t *conn, socks_cmd_e cmd );
