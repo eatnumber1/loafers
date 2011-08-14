@@ -1,12 +1,24 @@
 ACLOCAL_AMFLAGS = -I m4
 
-lib_LTLIBRARIES = libshoes.la
-libshoes_la_SOURCES = src/shoes.c
-libshoes_la_CFLAGS = -I$(srcdir)/include -std=gnu99 -fshort-enums
-libshoes_la_LDFLAGS = -no-undefined -version-info 0:0:0
+CFLAGS += -std=gnu99 -Wall -Werror -Wextra
 
-libshoes_la_includedir = $(includedir)
-libshoes_la_include_HEADERS = include/shoes.h
+lib_LTLIBRARIES = libloafers.la
+libloafers_la_SOURCES = src/loafers.c
+libloafers_la_CFLAGS = -I$(srcdir)/include -fshort-enums
+libloafers_la_LDFLAGS = -no-undefined -version-info 0:0:0
+
+libloafers_la_includedir = $(includedir)
+libloafers_la_include_HEADERS = include/loafers.h
+
+noinst_HEADERS = include/_loafers.h
 
 pkgconfigdir = $(libdir)/pkgconfig
-pkgconfig_DATA = shoes.pc
+pkgconfig_DATA = loafers.pc
+
+.PHONY: examples
+
+all-local: libloafers.la
+	$(MAKE) -C examples
+
+clean-local:
+	$(MAKE) -C examples clean

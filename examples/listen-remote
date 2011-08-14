@@ -1,0 +1,23 @@
+#!/bin/zsh
+emulate -L zsh
+setopt err_exit
+
+if [[ $# -ne 1 ]]; then
+	printf "Usage: %s listen_port\n" "$0" >&2
+	exit 1
+fi
+
+zmodload zsh/net/tcp
+
+ztcp -l "$1"
+typeset -i connect_fd=$REPLY
+ztcp -a $connect_fd
+typeset -i accept_fd=$REPLY
+ztcp -c $connect_fd
+read -ru $accept_fd host port
+ztcp -c $accept_fd
+
+ztcp "$host" "$port"
+typeset -i bind_fd=$REPLY
+print -u $bind_fd "Hello World!"
+ztcp -c $bind_fd
