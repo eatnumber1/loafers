@@ -41,39 +41,37 @@ loafers_rc_t loafers_rc_sys() {
 }
 
 loafers_rc_t loafers_get_bind_addr( loafers_conn_t *conn, char **addr ) {
-	if( conn == NULL || addr == NULL ) {
+	if( conn == NULL || addr == NULL || !conn->reply_avail ) {
 		assert(false);
 		errno = EINVAL;
 		return loafers_rc_sys();
 	}
-	if( !conn->reply_avail ) {
-		errno = EINVAL;
-		return loafers_rc_sys();
-	}
-	char *ret;
+	int ntop_af;
+	void *ntop_src;
+	socklen_t ntop_size;
 	switch( conn->reply.atyp ) {
 		case SOCKS_ATYP_IPV4:
-			ret = malloc(INET_ADDRSTRLEN);
-			if( ret == NULL ) return loafers_rc_sys();
-			if( inet_ntop(AF_INET, conn->reply.bnd_addr.ip4, ret, INET_ADDRSTRLEN) == NULL ) {
-				free(ret);
-				return loafers_rc_sys();
-			}
+			ntop_size = INET_ADDRSTRLEN;
+			ntop_af = AF_INET;
+			ntop_src = conn->reply.bnd_addr.ip4;
 			break;
 		case SOCKS_ATYP_IPV6:
-			ret = malloc(INET6_ADDRSTRLEN);
-			if( ret == NULL ) return loafers_rc_sys();
-			if( inet_ntop(AF_INET6, conn->reply.bnd_addr.ip6, ret, INET6_ADDRSTRLEN) == NULL ) {
-				free(ret);
-				return loafers_rc_sys();
-			}
+			ntop_size = INET6_ADDRSTRLEN;
+			ntop_af = AF_INET6;
+			ntop_src = conn->reply.bnd_addr.ip6;
 			break;
 		case SOCKS_ATYP_HOSTNAME:
-			ret = strdup(conn->reply.bnd_addr.hostname);
-			if( ret == NULL ) return loafers_rc_sys();
-			break;
+			*addr = strdup(conn->reply.bnd_addr.hostname);
+			if( *addr == NULL ) return loafers_rc_sys();
+			return loafers_rc(LOAFERS_ERR_NOERR);
 		default:
 			assert(false);
+	}
+	char *ret = malloc(ntop_size);
+	if( ret == NULL ) return loafers_rc_sys();
+	if( inet_ntop(ntop_af, ntop_src, ret, ntop_size) == NULL ) {
+		free(ret);
+		return loafers_rc_sys();
 	}
 	*addr = realloc(ret, strlen(ret) + 1);
 	if( *addr == NULL ) {
