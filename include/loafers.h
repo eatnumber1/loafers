@@ -68,21 +68,22 @@ typedef struct {
 struct _loafers_conn_t;
 typedef struct _loafers_conn_t loafers_conn_t;
 
-loafers_err_e loafers_errno( loafers_rc_t err );
-loafers_err_socks_e loafers_socks_errno( loafers_rc_t err );
-int loafers_sys_errno( loafers_rc_t err );
+__attribute__((visibility("default"))) loafers_err_e loafers_errno( loafers_rc_t err );
+__attribute__((visibility("default"))) loafers_err_socks_e loafers_socks_errno( loafers_rc_t err );
+__attribute__((visibility("default"))) int loafers_sys_errno( loafers_rc_t err );
 
-const char *loafers_strerror( loafers_rc_t err );
-loafers_rc_t loafers_conn_alloc( loafers_conn_t **conn );
-loafers_rc_t loafers_conn_free( loafers_conn_t **conn );
-loafers_rc_t loafers_set_version( loafers_conn_t *conn, socks_version_e version );
-loafers_rc_t loafers_set_methods( loafers_conn_t *conn, uint8_t nmethods, const socks_method_e methods[static nmethods] );
-loafers_rc_t loafers_set_command( loafers_conn_t *conn, socks_cmd_e cmd );
-loafers_rc_t loafers_set_hostname( loafers_conn_t *conn, const char *hostname, in_port_t port );
-loafers_rc_t loafers_set_sockaddr( loafers_conn_t *conn, const struct sockaddr *address );
-loafers_rc_t loafers_get_bind_addr( loafers_conn_t *conn, socks_atyp_e *atyp, socks_addr_u **addr );
-loafers_rc_t loafers_get_bind_port( loafers_conn_t *conn, in_port_t *port );
+__attribute__((visibility("default"))) const char *loafers_strerror( loafers_rc_t err );
+__attribute__((visibility("default"))) loafers_rc_t
+	loafers_conn_alloc( loafers_conn_t **conn ),
+	loafers_conn_free( loafers_conn_t **conn ),
+	loafers_set_version( loafers_conn_t *conn, socks_version_e version ),
+	loafers_set_methods( loafers_conn_t *conn, uint8_t nmethods, const socks_method_e methods[static nmethods] ),
+	loafers_set_command( loafers_conn_t *conn, socks_cmd_e cmd ),
+	loafers_set_hostname( loafers_conn_t *conn, const char *hostname, in_port_t port ),
+	loafers_set_sockaddr( loafers_conn_t *conn, const struct sockaddr *address ),
+	loafers_get_bind_addr( loafers_conn_t *conn, socks_atyp_e *atyp, socks_addr_u **addr ),
+	loafers_get_bind_port( loafers_conn_t *conn, in_port_t *port );
 
-loafers_rc_t loafers_handshake( loafers_conn_t *conn, int sockfd );
+__attribute__((visibility("default"))) loafers_rc_t loafers_handshake( loafers_conn_t *conn, int sockfd );
 
 #endif

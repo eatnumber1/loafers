@@ -24,6 +24,6 @@ loafers.pc
 stamp-h1
 .libs/
 libloafers.la
-libloafers_la-loafers.lo
+*.lo
 *.dSYM/
 config.cache
