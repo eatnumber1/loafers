@@ -43,19 +43,6 @@ typedef enum {
 	SOCKS_ERR_AFNOTSUP = 0x08
 } loafers_err_socks_e;
 
-typedef enum {
-	SOCKS_ATYP_UNINIT = 0x00,
-	SOCKS_ATYP_IPV4 = 0x01,
-	SOCKS_ATYP_HOSTNAME = 0x03,
-	SOCKS_ATYP_IPV6 = 0x04
-} socks_atyp_e;
-
-typedef struct {
-	struct in_addr *ip4;
-	struct in6_addr *ip6;
-	char *hostname;
-} socks_addr_u;
-
 // This must be deep-copiable with simple assignment (no pointers!)
 typedef struct {
 	loafers_err_e code;
@@ -81,7 +68,7 @@ __attribute__((visibility("default"))) loafers_rc_t
 	loafers_set_command( loafers_conn_t *conn, socks_cmd_e cmd ),
 	loafers_set_hostname( loafers_conn_t *conn, const char *hostname, in_port_t port ),
 	loafers_set_sockaddr( loafers_conn_t *conn, const struct sockaddr *address ),
-	loafers_get_bind_addr( loafers_conn_t *conn, socks_atyp_e *atyp, socks_addr_u **addr ),
+	loafers_get_bind_addr( loafers_conn_t *conn, char **addr ),
 	loafers_get_bind_port( loafers_conn_t *conn, in_port_t *port );
 
 __attribute__((visibility("default"))) loafers_rc_t loafers_handshake( loafers_conn_t *conn, int sockfd );

@@ -6,6 +6,7 @@
 #include <string.h>
 #include <netinet/in.h>
 #include <unistd.h>
+#include <arpa/inet.h>
 
 #include "config.h"
 
@@ -39,8 +40,8 @@ loafers_rc_t loafers_rc_sys() {
 	return ret;
 }
 
-loafers_rc_t loafers_get_bind_addr( loafers_conn_t *conn, socks_atyp_e *atyp, socks_addr_u **addr ) {
-	if( conn == NULL || atyp == NULL || addr == NULL ) {
+loafers_rc_t loafers_get_bind_addr( loafers_conn_t *conn, char **addr ) {
+	if( conn == NULL || addr == NULL ) {
 		assert(false);
 		errno = EINVAL;
 		return loafers_rc_sys();
@@ -49,8 +50,36 @@ loafers_rc_t loafers_get_bind_addr( loafers_conn_t *conn, socks_atyp_e *atyp, so
 		errno = EINVAL;
 		return loafers_rc_sys();
 	}
-	*atyp = conn->reply.atyp;
-	*addr = &conn->reply.bnd_addr;
+	char *ret;
+	switch( conn->reply.atyp ) {
+		case SOCKS_ATYP_IPV4:
+			ret = malloc(INET_ADDRSTRLEN);
+			if( ret == NULL ) return loafers_rc_sys();
+			if( inet_ntop(AF_INET, conn->reply.bnd_addr.ip4, ret, INET_ADDRSTRLEN) == NULL ) {
+				free(ret);
+				return loafers_rc_sys();
+			}
+			break;
+		case SOCKS_ATYP_IPV6:
+			ret = malloc(INET6_ADDRSTRLEN);
+			if( ret == NULL ) return loafers_rc_sys();
+			if( inet_ntop(AF_INET6, conn->reply.bnd_addr.ip6, ret, INET6_ADDRSTRLEN) == NULL ) {
+				free(ret);
+				return loafers_rc_sys();
+			}
+			break;
+		case SOCKS_ATYP_HOSTNAME:
+			ret = strdup(conn->reply.bnd_addr.hostname);
+			if( ret == NULL ) return loafers_rc_sys();
+			break;
+		default:
+			assert(false);
+	}
+	*addr = realloc(ret, strlen(ret) + 1);
+	if( *addr == NULL ) {
+		free(ret);
+		return loafers_rc_sys();
+	}
 	return loafers_rc(LOAFERS_ERR_NOERR);
 }
 

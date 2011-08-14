@@ -1,6 +1,19 @@
 #ifndef ___COMMON_H__
 #define ___COMMON_H__
 
+typedef enum {
+	SOCKS_ATYP_UNINIT = 0x00,
+	SOCKS_ATYP_IPV4 = 0x01,
+	SOCKS_ATYP_HOSTNAME = 0x03,
+	SOCKS_ATYP_IPV6 = 0x04
+} socks_atyp_e;
+
+typedef struct {
+	struct in_addr *ip4;
+	struct in6_addr *ip6;
+	char *hostname;
+} socks_addr_u;
+
 typedef struct {
 	socks_version_e ver;
 	uint8_t nmethods;

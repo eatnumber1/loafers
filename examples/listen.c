@@ -7,7 +7,6 @@
 #include <stdbool.h>
 #include <assert.h>
 #include <inttypes.h>
-#include <arpa/inet.h>
 
 #include <loafers.h>
 
@@ -137,11 +136,10 @@ int main( int argc, char *argv[] ) {
 	loafers_conn_t *conn;
 	loafers_rc_t rc;
 	int bind_sock = listen_bind(argv, &conn);
-	socks_atyp_e bind_addr_atyp;
-	socks_addr_u *bind_addr;
+	char *bind_addr;
 	in_port_t bind_port;
 
-	if( loafers_errno(rc = loafers_get_bind_addr(conn, &bind_addr_atyp, &bind_addr)) != LOAFERS_ERR_NOERR ) {
+	if( loafers_errno(rc = loafers_get_bind_addr(conn, &bind_addr)) != LOAFERS_ERR_NOERR ) {
 		fprintf(stderr, "loafers_get_bind_addr: %s\n", loafers_strerror(rc));
 		exit(EXIT_FAILURE);
 	}
@@ -150,52 +148,14 @@ int main( int argc, char *argv[] ) {
 		exit(EXIT_FAILURE);
 	}
 
-	char *bind_addr_str;
-	switch( bind_addr_atyp ) {
-		case SOCKS_ATYP_IPV4: {
-			bind_addr_str = malloc(INET_ADDRSTRLEN);
-			if( bind_addr_str == NULL ) {
-				perror("malloc");
-				exit(EXIT_FAILURE);
-			}
-			if( inet_ntop(AF_INET, bind_addr->ip4, bind_addr_str, INET_ADDRSTRLEN) == NULL ) {
-				perror("inet_ntop");
-				exit(EXIT_FAILURE);
-			}
-			break;
-		}
-		case SOCKS_ATYP_IPV6: {
-			bind_addr_str = malloc(INET6_ADDRSTRLEN);
-			if( bind_addr_str == NULL ) {
-				perror("malloc");
-				exit(EXIT_FAILURE);
-			}
-			if( inet_ntop(AF_INET6, bind_addr->ip6, bind_addr_str, INET6_ADDRSTRLEN) == NULL ) {
-				perror("inet_ntop");
-				exit(EXIT_FAILURE);
-			}
-			break;
-		}
-		case SOCKS_ATYP_HOSTNAME: {
-			bind_addr_str = strdup(bind_addr->hostname);
-			if( bind_addr_str == NULL ) {
-				perror("malloc");
-				exit(EXIT_FAILURE);
-			}
-			break;
-		}
-		default:
-			assert(false);
-	}
-
 	FILE *s = fdopen(sock, "a+");
 	if( s == NULL ) {
 		perror("fdopen");
 		exit(EXIT_FAILURE);
 	}
-	fprintf(s, "%s %" PRIu16 "\n", bind_addr_str, bind_port);
+	fprintf(s, "%s %" PRIu16 "\n", bind_addr, bind_port);
 	fflush(s);
-	free(bind_addr_str);
+	free(bind_addr);
 
 	if( loafers_errno(rc = loafers_handshake(conn, bind_sock)) != LOAFERS_ERR_NOERR ) {
 		fprintf(stderr, "loafers_handshake: %s\n", loafers_strerror(rc));
