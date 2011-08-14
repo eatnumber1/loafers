@@ -1,13 +1,6 @@
 #ifndef ___LOAFERS_H__
 #define ___LOAFERS_H__
 
-typedef enum {
-	SOCKS_ATYP_UNINIT = 0x00,
-	SOCKS_ATYP_IPV4 = 0x01,
-	SOCKS_ATYP_HOSTNAME = 0x03,
-	SOCKS_ATYP_IPV6 = 0x04
-} socks_atyp_e;
-
 typedef struct {
 	socks_version_e ver;
 	uint8_t nmethods;
@@ -18,12 +11,6 @@ typedef struct {
 	socks_version_e ver;
 	socks_method_e method;
 } socks_methodsel_t;
-
-typedef struct {
-	struct in_addr *ip4;
-	struct in6_addr *ip6;
-	char *hostname;
-} socks_addr_u;
 
 typedef struct {
 	socks_version_e ver;
@@ -43,6 +30,9 @@ typedef struct {
 } socks_reply_t;
 
 typedef enum {
+	LOAFERS_CONN_UNPREPARED,
+	LOAFERS_CONN_INVALID,
+
 	LOAFERS_CONN_VERSION_PREPARE,
 	LOAFERS_CONN_VERSION_SENDING,
 	LOAFERS_CONN_METHODSEL_PREPARE,
@@ -56,9 +46,7 @@ typedef enum {
 	LOAFERS_CONN_REPLY_PREPARE,
 	LOAFERS_CONN_REPLY_READING,
 
-	LOAFERS_CONN_UNPREPARED,
-	LOAFERS_CONN_CONNECTED,
-	LOAFERS_CONN_INVALID
+	LOAFERS_CONN_CONNECTED
 } loafers_conn_e;
 
 struct _loafers_conn_t {
@@ -72,6 +60,7 @@ struct _loafers_conn_t {
 	size_t bufremain;
 	// For passing information between states.
 	void *data;
+	bool reply_avail, bindwait;
 };
 
 static loafers_rc_t loafers_rc( loafers_err_e err );
@@ -102,6 +91,8 @@ static loafers_rc_t loafers_conn_reply_header_hostlen_prepare( loafers_conn_t *c
 static loafers_rc_t loafers_conn_reply_header_hostlen_reading( loafers_conn_t *conn, int sockfd );
 static loafers_rc_t loafers_conn_reply_prepare( loafers_conn_t *conn, int sockfd );
 static loafers_rc_t loafers_conn_reply_reading( loafers_conn_t *conn, int sockfd );
+
+static void loafers_free( void *ptr );
 
 typedef loafers_rc_t (*loafers_state_handler)( loafers_conn_t *, int );
 static const loafers_state_handler loafers_state_handlers[] = {
