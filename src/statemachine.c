@@ -28,7 +28,7 @@ static const loafers_state_handler loafers_state_handlers[] = {
 	[LOAFERS_CONN_REPLY_PREPARE] = loafers_conn_reply_prepare,
 	[LOAFERS_CONN_REPLY_READING] = loafers_conn_reply_reading
 };
-const size_t loafers_nostates = sizeof(loafers_state_handlers) / sizeof(loafers_state_handler);
+static const size_t loafers_nostates = sizeof(loafers_state_handlers) / sizeof(loafers_state_handler);
 
 static loafers_rc_t loafers_write( int fd, loafers_conn_t *conn ) {
 	if( conn == NULL ) {
