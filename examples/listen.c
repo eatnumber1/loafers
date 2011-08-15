@@ -194,7 +194,7 @@ int main( int argc, char *argv[] ) {
 				exit(EXIT_FAILURE);
 			}
 		} else {
-			printf("%c", c);
+			putchar(c);
 		}
 	} while( !feof(bs) );
 
