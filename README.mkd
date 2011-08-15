@@ -1,8 +1,9 @@
 # Description ![Project Status](http://stillmaintained.com/eatnumber1/loafers.png)
 Loafers is a client side SOCKS library.
 
-Currently, only SOCKSv5 CONNECT and BIND with no authentication is supported, but a
-complete, standards compliant implementation is planned.
+Currently, SOCKSv5 CONNECT and BIND with no authentication is supported, but a
+complete, [RFC1928](http://www.ietf.org/rfc/rfc1928.txt) compliant
+implementation is planned.
 
 # Use
 To use libloafers, a loafers_conn_t structure must be created and initialized. The
