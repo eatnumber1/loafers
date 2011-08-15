@@ -21,6 +21,12 @@ static const loafers_state_handler loafers_state_handlers[] = {
 	[LOAFERS_CONN_METHODSEL_READING] = loafers_conn_methodsel_reading,
 	[LOAFERS_CONN_REQUEST_PREPARE] = loafers_conn_request_prepare,
 	[LOAFERS_CONN_REQUEST_SENDING] = loafers_conn_request_sending,
+	[LOAFERS_CONN_BIND_REPLY_HEADER_PREPARE] = loafers_conn_bind_reply_header_prepare,
+	[LOAFERS_CONN_BIND_REPLY_HEADER_READING] = loafers_conn_bind_reply_header_reading,
+	[LOAFERS_CONN_BIND_REPLY_HEADER_HOSTLEN_PREPARE] = loafers_conn_bind_reply_header_hostlen_prepare,
+	[LOAFERS_CONN_BIND_REPLY_HEADER_HOSTLEN_READING] = loafers_conn_bind_reply_header_hostlen_reading,
+	[LOAFERS_CONN_BIND_REPLY_PREPARE] = loafers_conn_bind_reply_prepare,
+	[LOAFERS_CONN_BIND_REPLY_READING] = loafers_conn_bind_reply_reading,
 	[LOAFERS_CONN_REPLY_HEADER_PREPARE] = loafers_conn_reply_header_prepare,
 	[LOAFERS_CONN_REPLY_HEADER_READING] = loafers_conn_reply_header_reading,
 	[LOAFERS_CONN_REPLY_HEADER_HOSTLEN_PREPARE] = loafers_conn_reply_header_hostlen_prepare,
@@ -175,47 +181,57 @@ static loafers_rc_t loafers_conn_request_prepare( loafers_conn_t *conn, int sock
 static loafers_rc_t loafers_conn_request_sending( loafers_conn_t *conn, int sockfd ) {
 	loafers_rc_t rc;
 	if( loafers_errno(rc = loafers_write(sockfd, conn)) != LOAFERS_ERR_NOERR ) return rc;
-	conn->state = LOAFERS_CONN_REPLY_HEADER_PREPARE;
+	conn->state = conn->req.cmd == SOCKS_CMD_BIND ? LOAFERS_CONN_BIND_REPLY_HEADER_PREPARE : LOAFERS_CONN_REPLY_HEADER_PREPARE;
+	return loafers_rc(LOAFERS_ERR_NOERR);
+}
+
+static loafers_rc_t loafers_conn_generic_reply_header_prepare( loafers_conn_t *conn, int sockfd, bool *avail_flag, socks_reply_t **reply, loafers_conn_e next_state ) {
+	(void) sockfd;
+	loafers_rc_t rc;
+	*avail_flag = false;
+	if( loafers_errno(rc = loafers_connbuf_alloc(conn, 4 * sizeof(uint8_t))) != LOAFERS_ERR_NOERR ) return rc;
+	if( (conn->data = realloc(conn->data, sizeof(uint8_t))) == NULL ) return loafers_rc_sys();
+	if( (*reply = malloc(sizeof(socks_reply_t))) == NULL ) return loafers_rc_sys();
+	conn->state = next_state;
 	return loafers_rc(LOAFERS_ERR_NOERR);
 }
 
 static loafers_rc_t loafers_conn_reply_header_prepare( loafers_conn_t *conn, int sockfd ) {
-	(void) sockfd;
-	loafers_rc_t rc;
-	conn->reply_avail = false;
-	if( loafers_errno(rc = loafers_connbuf_alloc(conn, 4 * sizeof(uint8_t))) != LOAFERS_ERR_NOERR ) return rc;
-	if( (conn->data = realloc(conn->data, sizeof(uint8_t))) == NULL ) return loafers_rc_sys();
-	conn->state = LOAFERS_CONN_REPLY_HEADER_READING;
-	return loafers_rc(LOAFERS_ERR_NOERR);
+	return loafers_conn_generic_reply_header_prepare(conn, sockfd, &conn->reply_avail, &conn->reply, LOAFERS_CONN_REPLY_HEADER_READING);
 }
 
-static loafers_rc_t loafers_conn_reply_header_reading( loafers_conn_t *conn, int sockfd ) {
+static loafers_rc_t loafers_conn_bind_reply_header_prepare( loafers_conn_t *conn, int sockfd ) {
+	return loafers_conn_generic_reply_header_prepare(conn, sockfd, &conn->bnd_reply_avail, &conn->bnd_reply, LOAFERS_CONN_BIND_REPLY_HEADER_READING);
+}
+
+// next_states must contain the equivalent of { LOAFERS_CONN_REPLY_PREPARE, LOAFERS_CONN_REPLY_HEADER_HOSTLEN_PREPARE }
+static loafers_rc_t loafers_conn_generic_reply_header_reading( loafers_conn_t *conn, int sockfd, socks_reply_t *reply, const loafers_conn_e next_states[const static 2] ) {
 	loafers_rc_t rc;
 	if( loafers_errno(rc = loafers_read(sockfd, conn)) != LOAFERS_ERR_NOERR ) return rc;
-	conn->reply.ver = conn->buf[0];
-	conn->reply.rep = conn->buf[1];
+	reply->ver = conn->buf[0];
+	reply->rep = conn->buf[1];
 	assert(conn->buf[2] == 0x00);
-	conn->reply.atyp = conn->buf[3];
-	if( conn->reply.ver != conn->req.ver ) {
+	reply->atyp = conn->buf[3];
+	if( reply->ver != conn->req.ver ) {
 		conn->state = LOAFERS_CONN_INVALID;
 		return loafers_rc(LOAFERS_ERR_BADPACKET);
 	}
-	if( conn->reply.rep != SOCKS_ERR_NOERR ) {
+	if( reply->rep != SOCKS_ERR_NOERR ) {
 		conn->state = LOAFERS_CONN_INVALID;
-		return loafers_rc_socks(LOAFERS_ERR_SOCKS, conn->reply.rep);
+		return loafers_rc_socks(LOAFERS_ERR_SOCKS, reply->rep);
 	}
 	uint8_t *addrsiz = (uint8_t *) conn->data;
-	switch( conn->reply.atyp ) {
+	switch( reply->atyp ) {
 		case SOCKS_ATYP_IPV6:
 			*addrsiz = 16;
-			conn->state = LOAFERS_CONN_REPLY_PREPARE;
+			conn->state = next_states[0];
 			break;
 		case SOCKS_ATYP_IPV4:
 			*addrsiz = 4;
-			conn->state = LOAFERS_CONN_REPLY_PREPARE;
+			conn->state = next_states[0];
 			break;
 		case SOCKS_ATYP_HOSTNAME:
-			conn->state = LOAFERS_CONN_REPLY_HEADER_HOSTLEN_PREPARE;
+			conn->state = next_states[1];
 			break;
 		default:
 			assert(false);
@@ -225,40 +241,72 @@ static loafers_rc_t loafers_conn_reply_header_reading( loafers_conn_t *conn, int
 	return loafers_rc(LOAFERS_ERR_NOERR);
 }
 
-static loafers_rc_t loafers_conn_reply_header_hostlen_prepare( loafers_conn_t *conn, int sockfd ) {
+static loafers_rc_t loafers_conn_reply_header_reading( loafers_conn_t *conn, int sockfd ) {
+	static const loafers_conn_e states[2] = {
+		LOAFERS_CONN_REPLY_PREPARE,
+		LOAFERS_CONN_REPLY_HEADER_HOSTLEN_PREPARE
+	};
+	return loafers_conn_generic_reply_header_reading(conn, sockfd, conn->reply, states);
+}
+
+static loafers_rc_t loafers_conn_bind_reply_header_reading( loafers_conn_t *conn, int sockfd ) {
+	static const loafers_conn_e states[2] = {
+		LOAFERS_CONN_BIND_REPLY_PREPARE,
+		LOAFERS_CONN_BIND_REPLY_HEADER_HOSTLEN_PREPARE
+	};
+	return loafers_conn_generic_reply_header_reading(conn, sockfd, conn->bnd_reply, states);
+}
+
+static loafers_rc_t loafers_conn_generic_reply_header_hostlen_prepare( loafers_conn_t *conn, int sockfd, loafers_conn_e next_state ) {
 	(void) sockfd;
 	loafers_rc_t rc;
 	if( loafers_errno(rc = loafers_connbuf_alloc(conn, sizeof(uint8_t))) != LOAFERS_ERR_NOERR ) return rc;
-	conn->state = LOAFERS_CONN_REPLY_HEADER_HOSTLEN_READING;
+	conn->state = next_state;
+	return loafers_rc(LOAFERS_ERR_NOERR);
+}
+
+static loafers_rc_t loafers_conn_reply_header_hostlen_prepare( loafers_conn_t *conn, int sockfd ) {
+	return loafers_conn_generic_reply_header_hostlen_prepare(conn, sockfd, LOAFERS_CONN_REPLY_HEADER_HOSTLEN_READING);
+}
+
+static loafers_rc_t loafers_conn_bind_reply_header_hostlen_prepare( loafers_conn_t *conn, int sockfd ) {
+	return loafers_conn_generic_reply_header_hostlen_prepare(conn, sockfd, LOAFERS_CONN_BIND_REPLY_HEADER_HOSTLEN_READING);
+}
+
+static loafers_rc_t loafers_conn_generic_reply_header_hostlen_reading( loafers_conn_t *conn, int sockfd, loafers_conn_e next_state ) {
+	loafers_rc_t rc;
+	if( loafers_errno(rc = loafers_read(sockfd, conn)) != LOAFERS_ERR_NOERR ) return rc;
+	*((uint8_t *) conn->data) = conn->buf[0];
+	conn->state = next_state;
 	return loafers_rc(LOAFERS_ERR_NOERR);
 }
 
 static loafers_rc_t loafers_conn_reply_header_hostlen_reading( loafers_conn_t *conn, int sockfd ) {
-	loafers_rc_t rc;
-	if( loafers_errno(rc = loafers_read(sockfd, conn)) != LOAFERS_ERR_NOERR ) return rc;
-	*((uint8_t *) conn->data) = conn->buf[0];
-	conn->state = LOAFERS_CONN_REPLY_PREPARE;
-	return loafers_rc(LOAFERS_ERR_NOERR);
+	return loafers_conn_generic_reply_header_hostlen_reading(conn, sockfd, LOAFERS_CONN_REPLY_PREPARE);
 }
 
-static loafers_rc_t loafers_conn_reply_prepare( loafers_conn_t *conn, int sockfd ) {
+static loafers_rc_t loafers_conn_bind_reply_header_hostlen_reading( loafers_conn_t *conn, int sockfd ) {
+	return loafers_conn_generic_reply_header_hostlen_reading(conn, sockfd, LOAFERS_CONN_BIND_REPLY_PREPARE);
+}
+
+static loafers_rc_t loafers_conn_generic_reply_prepare( loafers_conn_t *conn, int sockfd, socks_reply_t *reply, loafers_conn_e next_state ) {
 	(void) sockfd;
 	loafers_rc_t rc;
 	uint8_t buflen = *((uint8_t *) conn->data);
 	if( loafers_errno(rc = loafers_connbuf_alloc(conn, buflen + sizeof(uint16_t))) != LOAFERS_ERR_NOERR ) return rc;
-	if( conn->reply.atyp == SOCKS_ATYP_HOSTNAME ) buflen++;
+	if( reply->atyp == SOCKS_ATYP_HOSTNAME ) buflen++;
 	void *bnd_addr;
 	if( (bnd_addr = malloc(buflen)) == NULL ) return loafers_rc_sys();
-	switch( conn->reply.atyp ) {
+	switch( reply->atyp ) {
 		case SOCKS_ATYP_IPV6:
-			conn->reply.bnd_addr.ip6 = (struct in6_addr *) bnd_addr;
+			reply->bnd_addr.ip6 = (struct in6_addr *) bnd_addr;
 			break;
 		case SOCKS_ATYP_IPV4:
-			conn->reply.bnd_addr.ip4 = (struct in_addr *) bnd_addr;
+			reply->bnd_addr.ip4 = (struct in_addr *) bnd_addr;
 			break;
 		case SOCKS_ATYP_HOSTNAME:
-			conn->reply.bnd_addr.hostname = (char *) bnd_addr;
-			conn->reply.bnd_addr.hostname[buflen] = '\0';
+			reply->bnd_addr.hostname = (char *) bnd_addr;
+			reply->bnd_addr.hostname[buflen - 1] = '\0';
 			break;
 		default:
 			free(bnd_addr);
@@ -266,24 +314,32 @@ static loafers_rc_t loafers_conn_reply_prepare( loafers_conn_t *conn, int sockfd
 			errno = EINVAL;
 			return loafers_rc_sys();
 	}
-	conn->state = LOAFERS_CONN_REPLY_READING;
+	conn->state = next_state;
 	return loafers_rc(LOAFERS_ERR_NOERR);
 }
 
-static loafers_rc_t loafers_conn_reply_reading( loafers_conn_t *conn, int sockfd ) {
+static loafers_rc_t loafers_conn_reply_prepare( loafers_conn_t *conn, int sockfd ) {
+	return loafers_conn_generic_reply_prepare(conn, sockfd, conn->reply, LOAFERS_CONN_REPLY_READING);
+}
+
+static loafers_rc_t loafers_conn_bind_reply_prepare( loafers_conn_t *conn, int sockfd ) {
+	return loafers_conn_generic_reply_prepare(conn, sockfd, conn->bnd_reply, LOAFERS_CONN_BIND_REPLY_READING);
+}
+
+static loafers_rc_t loafers_conn_generic_reply_reading( loafers_conn_t *conn, int sockfd, bool *avail_flag, socks_reply_t *reply, loafers_conn_e next_state ) {
 	loafers_rc_t rc;
 	uint8_t buflen = *((uint8_t *) conn->data);
 	if( loafers_errno(rc = loafers_read(sockfd, conn)) != LOAFERS_ERR_NOERR ) return rc;
 	void *s1;
-	switch( conn->reply.atyp ) {
+	switch( reply->atyp ) {
 		case SOCKS_ATYP_IPV6:
-			s1 = conn->reply.bnd_addr.ip6;
+			s1 = reply->bnd_addr.ip6;
 			break;
 		case SOCKS_ATYP_IPV4:
-			s1 = conn->reply.bnd_addr.ip4;
+			s1 = reply->bnd_addr.ip4;
 			break;
 		case SOCKS_ATYP_HOSTNAME:
-			s1 = conn->reply.bnd_addr.hostname;
+			s1 = reply->bnd_addr.hostname;
 			break;
 		default:
 			assert(false);
@@ -291,16 +347,20 @@ static loafers_rc_t loafers_conn_reply_reading( loafers_conn_t *conn, int sockfd
 			return loafers_rc_sys();
 	}
 	memcpy(s1, conn->buf, buflen);
-	conn->reply.bnd_port = ntohs(*((in_port_t *) &conn->buf[buflen]));
-	conn->reply_avail = true;
-	if( conn->req.cmd == SOCKS_CMD_BIND && conn->bindwait == false ) {
-		conn->bindwait = true;
-		conn->state = LOAFERS_CONN_REPLY_HEADER_PREPARE;
-		return loafers_rc(LOAFERS_ERR_NOERR_BINDWAIT);
-	} else {
-		conn->state = LOAFERS_CONN_CONNECTED;
-		return loafers_rc(LOAFERS_ERR_NOERR);
-	}
+	reply->bnd_port = ntohs(*((in_port_t *) &conn->buf[buflen]));
+	*avail_flag = true;
+	conn->state = next_state;
+	return loafers_rc(LOAFERS_ERR_NOERR);
+}
+
+static loafers_rc_t loafers_conn_reply_reading( loafers_conn_t *conn, int sockfd ) {
+	return loafers_conn_generic_reply_reading(conn, sockfd, &conn->reply_avail, conn->reply, LOAFERS_CONN_CONNECTED);
+}
+
+static loafers_rc_t loafers_conn_bind_reply_reading( loafers_conn_t *conn, int sockfd ) {
+	loafers_rc_t rc;
+	if( loafers_errno(rc = loafers_conn_generic_reply_reading(conn, sockfd, &conn->bnd_reply_avail, conn->bnd_reply, LOAFERS_CONN_REPLY_HEADER_PREPARE)) != LOAFERS_ERR_NOERR ) return rc;
+	return loafers_rc(LOAFERS_ERR_NOERR_BINDWAIT);
 }
 
 loafers_rc_t loafers_handshake( loafers_conn_t *conn, int sockfd ) {

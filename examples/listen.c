@@ -187,5 +187,6 @@ int main( int argc, char *argv[] ) {
 	freeaddrinfo(res);
 	fclose(bs);
 	fclose(s);
+
 	return EXIT_SUCCESS;
 }

@@ -40,8 +40,8 @@ loafers_rc_t loafers_rc_sys() {
 	return ret;
 }
 
-loafers_rc_t loafers_get_bind_addr( loafers_conn_t *conn, char **addr ) {
-	if( conn == NULL || addr == NULL || !conn->reply_avail ) {
+static loafers_rc_t loafers_get_generic_addr( char **addr, socks_reply_t *reply ) {
+	if( addr == NULL || reply == NULL ) {
 		assert(false);
 		errno = EINVAL;
 		return loafers_rc_sys();
@@ -49,19 +49,19 @@ loafers_rc_t loafers_get_bind_addr( loafers_conn_t *conn, char **addr ) {
 	int ntop_af;
 	void *ntop_src;
 	socklen_t ntop_size;
-	switch( conn->reply.atyp ) {
+	switch( reply->atyp ) {
 		case SOCKS_ATYP_IPV4:
 			ntop_size = INET_ADDRSTRLEN;
 			ntop_af = AF_INET;
-			ntop_src = conn->reply.bnd_addr.ip4;
+			ntop_src = reply->bnd_addr.ip4;
 			break;
 		case SOCKS_ATYP_IPV6:
 			ntop_size = INET6_ADDRSTRLEN;
 			ntop_af = AF_INET6;
-			ntop_src = conn->reply.bnd_addr.ip6;
+			ntop_src = reply->bnd_addr.ip6;
 			break;
 		case SOCKS_ATYP_HOSTNAME:
-			*addr = strdup(conn->reply.bnd_addr.hostname);
+			*addr = strdup(reply->bnd_addr.hostname);
 			if( *addr == NULL ) return loafers_rc_sys();
 			return loafers_rc(LOAFERS_ERR_NOERR);
 		default:
@@ -81,18 +81,48 @@ loafers_rc_t loafers_get_bind_addr( loafers_conn_t *conn, char **addr ) {
 	return loafers_rc(LOAFERS_ERR_NOERR);
 }
 
-loafers_rc_t loafers_get_bind_port( loafers_conn_t *conn, in_port_t *port ) {
-	if( conn == NULL || port == NULL ) {
+loafers_rc_t loafers_get_external_addr( loafers_conn_t *conn, char **addr ) {
+	if( conn == NULL || addr == NULL || !conn->reply_avail ) {
 		assert(false);
 		errno = EINVAL;
 		return loafers_rc_sys();
 	}
-	if( !conn->reply_avail ) {
+	return loafers_get_generic_addr(addr, conn->reply);
+}
+
+loafers_rc_t loafers_get_bind_addr( loafers_conn_t *conn, char **addr ) {
+	if( conn == NULL || addr == NULL || !conn->bnd_reply_avail ) {
+		assert(false);
 		errno = EINVAL;
 		return loafers_rc_sys();
 	}
-	*port = conn->reply.bnd_port;
+	return loafers_get_generic_addr(addr, conn->bnd_reply);
+}
+
+static loafers_rc_t loafers_get_generic_port( in_port_t *port, socks_reply_t *reply ) {
+	if( reply == NULL || port == NULL ) {
+		assert(false);
+		errno = EINVAL;
+		return loafers_rc_sys();
+	}
+	*port = reply->bnd_port;
 	return loafers_rc(LOAFERS_ERR_NOERR);
+}
+
+loafers_rc_t loafers_get_external_port( loafers_conn_t *conn, in_port_t *port ) {
+	if( conn == NULL || !conn->reply_avail ) {
+		errno = EINVAL;
+		return loafers_rc_sys();
+	}
+	return loafers_get_generic_port(port, conn->reply);
+}
+
+loafers_rc_t loafers_get_bind_port( loafers_conn_t *conn, in_port_t *port ) {
+	if( conn == NULL || !conn->bnd_reply_avail ) {
+		errno = EINVAL;
+		return loafers_rc_sys();
+	}
+	return loafers_get_generic_port(port, conn->bnd_reply);
 }
 
 loafers_rc_t loafers_rc_socks( loafers_err_e err, loafers_err_socks_e socks_err ) {
@@ -189,11 +219,21 @@ loafers_rc_t loafers_conn_free( loafers_conn_t **conn ) {
 	if( c->buf != NULL ) free(c->buf);
 	if( c->data != NULL ) free(c->data);
 	loafers_rc_t rc = loafers_free_addr_u(c->req.atyp, c->req.dst_addr);
-	loafers_rc_t rc2 = loafers_free_addr_u(c->reply.atyp, c->reply.bnd_addr);
+	loafers_rc_t rc2, rc3;
+	rc2 = rc3 = loafers_rc(LOAFERS_ERR_NOERR);
+	if( c->reply != NULL ) {
+		rc2 = loafers_free_addr_u(c->reply->atyp, c->reply->bnd_addr);
+		free(c->reply);
+	}
+	if( c->bnd_reply != NULL ) {
+		rc3 = loafers_free_addr_u(c->bnd_reply->atyp, c->bnd_reply->bnd_addr);
+		free(c->bnd_reply);
+	}
 	free(c);
 	*conn = NULL;
 	if( loafers_errno(rc) != LOAFERS_ERR_NOERR ) return rc;
 	if( loafers_errno(rc2) != LOAFERS_ERR_NOERR ) return rc2;
+	if( loafers_errno(rc3) != LOAFERS_ERR_NOERR ) return rc3;
 	return loafers_rc(LOAFERS_ERR_NOERR);
 }
 

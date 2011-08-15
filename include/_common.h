@@ -52,6 +52,12 @@ typedef enum {
 	LOAFERS_CONN_METHODSEL_READING,
 	LOAFERS_CONN_REQUEST_PREPARE,
 	LOAFERS_CONN_REQUEST_SENDING,
+	LOAFERS_CONN_BIND_REPLY_HEADER_PREPARE,
+	LOAFERS_CONN_BIND_REPLY_HEADER_READING,
+	LOAFERS_CONN_BIND_REPLY_HEADER_HOSTLEN_PREPARE,
+	LOAFERS_CONN_BIND_REPLY_HEADER_HOSTLEN_READING,
+	LOAFERS_CONN_BIND_REPLY_PREPARE,
+	LOAFERS_CONN_BIND_REPLY_READING,
 	LOAFERS_CONN_REPLY_HEADER_PREPARE,
 	LOAFERS_CONN_REPLY_HEADER_READING,
 	LOAFERS_CONN_REPLY_HEADER_HOSTLEN_PREPARE,
@@ -65,15 +71,17 @@ typedef enum {
 struct _loafers_conn_t {
 	socks_version_t ver;
 	socks_request_t req;
-	socks_reply_t reply;
+	socks_reply_t *reply;
+	socks_reply_t *bnd_reply;
 	size_t addrsiz;
 	// Connection state information
 	loafers_conn_e state;
 	uint8_t *buf, *bufptr;
 	size_t bufremain;
+	bool reply_avail, bnd_reply_avail;
+	bool bindwait;
 	// For passing information between states.
 	void *data;
-	bool reply_avail, bindwait;
 };
 
 loafers_rc_t loafers_rc( loafers_err_e err );
