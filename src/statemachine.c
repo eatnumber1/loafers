@@ -192,6 +192,7 @@ static loafers_rc_t loafers_conn_generic_reply_header_prepare( loafers_conn_t *c
 	if( loafers_errno(rc = loafers_connbuf_alloc(conn, 4 * sizeof(uint8_t))) != LOAFERS_ERR_NOERR ) return rc;
 	if( (conn->data = realloc(conn->data, sizeof(uint8_t))) == NULL ) return loafers_rc_sys();
 	if( (*reply = malloc(sizeof(socks_reply_t))) == NULL ) return loafers_rc_sys();
+	memset(*reply, 0, sizeof(socks_reply_t));
 	conn->state = next_state;
 	return loafers_rc(LOAFERS_ERR_NOERR);
 }
