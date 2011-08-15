@@ -153,6 +153,7 @@ int main( int argc, char *argv[] ) {
 		perror("fdopen");
 		exit(EXIT_FAILURE);
 	}
+	printf("Commanding remote to connect to us at %s:%" PRIu16 "\n", bind_addr, bind_port);
 	fprintf(s, "%s %" PRIu16 "\n", bind_addr, bind_port);
 	fflush(s);
 	free(bind_addr);
