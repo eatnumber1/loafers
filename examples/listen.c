@@ -162,6 +162,19 @@ int main( int argc, char *argv[] ) {
 		loafers_conn_free(&conn);
 		exit(EXIT_FAILURE);
 	}
+
+	char *remote_addr;
+	in_port_t remote_port;
+	if( loafers_errno(rc = loafers_get_remote_addr(conn, &remote_addr)) != LOAFERS_ERR_NOERR ) {
+		fprintf(stderr, "loafers_get_bind_addr: %s\n", loafers_strerror(rc));
+		exit(EXIT_FAILURE);
+	}
+	if( loafers_errno(rc = loafers_get_remote_port(conn, &remote_port)) != LOAFERS_ERR_NOERR ) {
+		fprintf(stderr, "loafers_get_bind_port: %s\n", loafers_strerror(rc));
+		exit(EXIT_FAILURE);
+	}
+	printf("Connection from %s:%" PRIu16 "\n", remote_addr, remote_port);
+
 	if( loafers_errno(rc = loafers_conn_free(&conn)) != LOAFERS_ERR_NOERR ) {
 		fprintf(stderr, "loafers_conn_free: %s\n", loafers_strerror(rc));
 		exit(EXIT_FAILURE);

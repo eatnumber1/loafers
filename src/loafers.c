@@ -81,7 +81,7 @@ static loafers_rc_t loafers_get_generic_addr( char **addr, socks_reply_t *reply 
 	return loafers_rc(LOAFERS_ERR_NOERR);
 }
 
-loafers_rc_t loafers_get_external_addr( loafers_conn_t *conn, char **addr ) {
+loafers_rc_t loafers_get_remote_addr( loafers_conn_t *conn, char **addr ) {
 	if( conn == NULL || addr == NULL || !conn->reply_avail ) {
 		assert(false);
 		errno = EINVAL;
@@ -109,7 +109,7 @@ static loafers_rc_t loafers_get_generic_port( in_port_t *port, socks_reply_t *re
 	return loafers_rc(LOAFERS_ERR_NOERR);
 }
 
-loafers_rc_t loafers_get_external_port( loafers_conn_t *conn, in_port_t *port ) {
+loafers_rc_t loafers_get_remote_port( loafers_conn_t *conn, in_port_t *port ) {
 	if( conn == NULL || !conn->reply_avail ) {
 		errno = EINVAL;
 		return loafers_rc_sys();

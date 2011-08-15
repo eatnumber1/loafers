@@ -68,8 +68,8 @@ __attribute__((visibility("default"))) loafers_rc_t
 	loafers_set_command( loafers_conn_t *conn, socks_cmd_e cmd ),
 	loafers_set_hostname( loafers_conn_t *conn, const char *hostname, in_port_t port ),
 	loafers_set_sockaddr( loafers_conn_t *conn, const struct sockaddr *address ),
-	loafers_get_external_addr( loafers_conn_t *conn, char **addr ),
-	loafers_get_external_port( loafers_conn_t *conn, in_port_t *port ),
+	loafers_get_remote_addr( loafers_conn_t *conn, char **addr ),
+	loafers_get_remote_port( loafers_conn_t *conn, in_port_t *port ),
 	loafers_get_bind_addr( loafers_conn_t *conn, char **addr ),
 	loafers_get_bind_port( loafers_conn_t *conn, in_port_t *port );
 
