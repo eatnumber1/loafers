@@ -194,7 +194,7 @@ int main( int argc, char *argv[] ) {
 				exit(EXIT_FAILURE);
 			}
 		} else {
-			printf("%c", (unsigned char) c);
+			printf("%c", c);
 		}
 	} while( !feof(bs) );
 
