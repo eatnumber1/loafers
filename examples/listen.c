@@ -7,10 +7,11 @@
 #include <stdbool.h>
 #include <assert.h>
 #include <inttypes.h>
+#include <arpa/inet.h>
 
 #include <loafers.h>
 
-loafers_conn_t *make_conn( socks_cmd_e cmd, char *hostname, char *port ) {
+static loafers_conn_t *make_conn( socks_cmd_e cmd, char *hostname, char *port ) {
 	loafers_conn_t *conn;
 	loafers_rc_t rc;
 	if( loafers_errno(rc = loafers_conn_alloc(&conn)) != LOAFERS_ERR_NOERR ) {
@@ -42,13 +43,51 @@ loafers_conn_t *make_conn( socks_cmd_e cmd, char *hostname, char *port ) {
 }
 
 static struct addrinfo *res;
+static char *res_str;
 
-int listen_connect( char *argv[] ) {
+static char *addrinfo_to_str( const struct addrinfo *info ) {
+	socklen_t size;
+	void *ntop_src;
+	in_port_t port;
+	switch( info->ai_addr->sa_family ) {
+		case AF_INET: {
+			size = INET_ADDRSTRLEN;
+			struct sockaddr_in *addr = (struct sockaddr_in *) info->ai_addr;
+			ntop_src = &addr->sin_addr;
+			port = htons(addr->sin_port);
+			break;
+		}
+		case AF_INET6: {
+			size = INET6_ADDRSTRLEN;
+			struct sockaddr_in6 *addr = (struct sockaddr_in6 *) info->ai_addr;
+			ntop_src = &addr->sin6_addr;
+			port = htons(addr->sin6_port);
+			break;
+		}
+		default:
+			assert(false);
+	}
+	char host[size];
+	if( inet_ntop(info->ai_family, ntop_src, host, size) == NULL ) {
+		perror("inet_ntop");
+		exit(EXIT_FAILURE);
+	}
+	char *ret;
+	if( asprintf(&ret, "%s:%" PRIu16, host, port) == -1 ) {
+		perror("asprintf");
+		exit(EXIT_FAILURE);
+	}
+	return ret;
+}
+
+static int listen_connect( char *argv[] ) {
 	int sock = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
 	if( sock == -1 ) {
 		perror("socket");
 		exit(EXIT_FAILURE);
 	}
+
+	printf("Connecting to proxy at %s for CONNECT\n", res_str);
 	
 	if( connect(sock, res->ai_addr, res->ai_addrlen) != 0 ) {
 		perror("connect");
@@ -62,6 +101,20 @@ int listen_connect( char *argv[] ) {
 		loafers_conn_free(&conn);
 		exit(EXIT_FAILURE);
 	}
+
+	char *external_addr;
+	in_port_t external_port;
+	if( loafers_errno(rc = loafers_get_external_addr(conn, &external_addr)) != LOAFERS_ERR_NOERR ) {
+		fprintf(stderr, "loafers_get_external_addr: %s\n", loafers_strerror(rc));
+		exit(EXIT_FAILURE);
+	}
+	if( loafers_errno(rc = loafers_get_external_port(conn, &external_port)) != LOAFERS_ERR_NOERR ) {
+		fprintf(stderr, "loafers_get_external_port: %s\n", loafers_strerror(rc));
+		exit(EXIT_FAILURE);
+	}
+	printf("Connecting to %s:%s via %s:%" PRIu16 "\n", argv[3], argv[4], external_addr, external_port);
+	free(external_addr);
+
 	if( loafers_errno(rc = loafers_conn_free(&conn)) != LOAFERS_ERR_NOERR ) {
 		fprintf(stderr, "loafers_conn_free: %s\n", loafers_strerror(rc));
 		exit(EXIT_FAILURE);
@@ -70,7 +123,7 @@ int listen_connect( char *argv[] ) {
 	return sock;
 }
 
-int listen_bind( char *argv[], loafers_conn_t **connptr ) {
+static int listen_bind( char *argv[], loafers_conn_t **connptr ) {
 	struct addrinfo hints;
 	bzero(&hints, sizeof(struct addrinfo));
 	hints.ai_family = res->ai_family;
@@ -89,12 +142,18 @@ int listen_bind( char *argv[], loafers_conn_t **connptr ) {
 		exit(EXIT_FAILURE);
 	}
 
+	char *res2_str = addrinfo_to_str(res2);
+	printf("Binding listening socket at %s\n", res2_str);
+	free(res2_str);
+
 	if( bind(sock, res2->ai_addr, res2->ai_addrlen) == -1 ) {
 		perror("bind");
 		exit(EXIT_FAILURE);
 	}
 
 	freeaddrinfo(res2);
+
+	printf("Connecting to proxy at %s for BIND\n", res_str);
 	
 	if( connect(sock, res->ai_addr, res->ai_addrlen) != 0 ) {
 		perror("connect");
@@ -130,21 +189,22 @@ int main( int argc, char *argv[] ) {
 		fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(retcode));
 		exit(EXIT_FAILURE);
 	}
+	res_str = addrinfo_to_str(res);
 
 	int sock = listen_connect(argv);
 
 	loafers_conn_t *conn;
 	loafers_rc_t rc;
-	int bind_sock = listen_bind(argv, &conn);
-	char *bind_addr;
-	in_port_t bind_port;
+	int listen_sock = listen_bind(argv, &conn);
+	char *listen_addr;
+	in_port_t listen_port;
 
-	if( loafers_errno(rc = loafers_get_bind_addr(conn, &bind_addr)) != LOAFERS_ERR_NOERR ) {
-		fprintf(stderr, "loafers_get_bind_addr: %s\n", loafers_strerror(rc));
+	if( loafers_errno(rc = loafers_get_listen_addr(conn, &listen_addr)) != LOAFERS_ERR_NOERR ) {
+		fprintf(stderr, "loafers_get_listen_addr: %s\n", loafers_strerror(rc));
 		exit(EXIT_FAILURE);
 	}
-	if( loafers_errno(rc = loafers_get_bind_port(conn, &bind_port)) != LOAFERS_ERR_NOERR ) {
-		fprintf(stderr, "loafers_get_bind_port: %s\n", loafers_strerror(rc));
+	if( loafers_errno(rc = loafers_get_listen_port(conn, &listen_port)) != LOAFERS_ERR_NOERR ) {
+		fprintf(stderr, "loafers_get_listen_port: %s\n", loafers_strerror(rc));
 		exit(EXIT_FAILURE);
 	}
 
@@ -153,12 +213,12 @@ int main( int argc, char *argv[] ) {
 		perror("fdopen");
 		exit(EXIT_FAILURE);
 	}
-	printf("Commanding remote to connect to us at %s:%" PRIu16 "\n", bind_addr, bind_port);
-	fprintf(s, "%s %" PRIu16 "\n", bind_addr, bind_port);
+	printf("Commanding remote to connect to us at %s:%" PRIu16 "\n", listen_addr, listen_port);
+	fprintf(s, "%s %" PRIu16 "\n", listen_addr, listen_port);
 	fflush(s);
-	free(bind_addr);
+	free(listen_addr);
 
-	if( loafers_errno(rc = loafers_handshake(conn, bind_sock)) != LOAFERS_ERR_NOERR ) {
+	if( loafers_errno(rc = loafers_handshake(conn, listen_sock)) != LOAFERS_ERR_NOERR ) {
 		fprintf(stderr, "loafers_handshake: %s\n", loafers_strerror(rc));
 		loafers_conn_free(&conn);
 		exit(EXIT_FAILURE);
@@ -167,21 +227,22 @@ int main( int argc, char *argv[] ) {
 	char *remote_addr;
 	in_port_t remote_port;
 	if( loafers_errno(rc = loafers_get_remote_addr(conn, &remote_addr)) != LOAFERS_ERR_NOERR ) {
-		fprintf(stderr, "loafers_get_bind_addr: %s\n", loafers_strerror(rc));
+		fprintf(stderr, "loafers_get_remote_addr: %s\n", loafers_strerror(rc));
 		exit(EXIT_FAILURE);
 	}
 	if( loafers_errno(rc = loafers_get_remote_port(conn, &remote_port)) != LOAFERS_ERR_NOERR ) {
-		fprintf(stderr, "loafers_get_bind_port: %s\n", loafers_strerror(rc));
+		fprintf(stderr, "loafers_get_remote_port: %s\n", loafers_strerror(rc));
 		exit(EXIT_FAILURE);
 	}
 	printf("Connection from %s:%" PRIu16 "\n", remote_addr, remote_port);
+	free(remote_addr);
 
 	if( loafers_errno(rc = loafers_conn_free(&conn)) != LOAFERS_ERR_NOERR ) {
 		fprintf(stderr, "loafers_conn_free: %s\n", loafers_strerror(rc));
 		exit(EXIT_FAILURE);
 	}
 
-	FILE *bs = fdopen(bind_sock, "a+");
+	FILE *bs = fdopen(listen_sock, "a+");
 	if( s == NULL ) {
 		perror("fdopen");
 		exit(EXIT_FAILURE);
@@ -199,6 +260,7 @@ int main( int argc, char *argv[] ) {
 	} while( !feof(bs) );
 
 	freeaddrinfo(res);
+	free(res_str);
 	fclose(bs);
 	fclose(s);
 

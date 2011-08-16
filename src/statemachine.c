@@ -37,12 +37,6 @@ static const loafers_state_handler loafers_state_handlers[] = {
 static const size_t loafers_nostates = sizeof(loafers_state_handlers) / sizeof(loafers_state_handler);
 
 static loafers_rc_t loafers_write( int fd, loafers_conn_t *conn ) {
-	if( conn == NULL ) {
-		assert(false);
-		errno = EINVAL;
-		return loafers_rc_sys();
-	}
-
 	uint8_t *bufptr = conn->bufptr;
 	size_t bufremain = conn->bufremain;
 
@@ -69,12 +63,6 @@ static loafers_rc_t loafers_write( int fd, loafers_conn_t *conn ) {
 }
 
 static loafers_rc_t loafers_read( int fd, loafers_conn_t *conn ) {
-	if( conn == NULL ) {
-		assert(false);
-		errno = EINVAL;
-		return loafers_rc_sys();
-	}
-
 	uint8_t *bufptr = conn->bufptr;
 	size_t bufremain = conn->bufremain;
 
@@ -191,7 +179,7 @@ static loafers_rc_t loafers_conn_generic_reply_header_prepare( loafers_conn_t *c
 	*avail_flag = false;
 	if( loafers_errno(rc = loafers_connbuf_alloc(conn, 4 * sizeof(uint8_t))) != LOAFERS_ERR_NOERR ) return rc;
 	if( (conn->data = realloc(conn->data, sizeof(uint8_t))) == NULL ) return loafers_rc_sys();
-	if( (*reply = malloc(sizeof(socks_reply_t))) == NULL ) return loafers_rc_sys();
+	if( (*reply = realloc(*reply, sizeof(socks_reply_t))) == NULL ) return loafers_rc_sys();
 	memset(*reply, 0, sizeof(socks_reply_t));
 	conn->state = next_state;
 	return loafers_rc(LOAFERS_ERR_NOERR);
@@ -365,11 +353,7 @@ static loafers_rc_t loafers_conn_bind_reply_reading( loafers_conn_t *conn, int s
 }
 
 loafers_rc_t loafers_handshake( loafers_conn_t *conn, int sockfd ) {
-	if( conn == NULL ) {
-		assert(false);
-		errno = EINVAL;
-		return loafers_rc_sys();
-	}
+	assert(conn != NULL);
 
 	while( conn->state != LOAFERS_CONN_CONNECTED ) {
 		if( conn->state >= loafers_nostates ) return loafers_rc(LOAFERS_ERR_BADSTATE);

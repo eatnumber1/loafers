@@ -40,12 +40,10 @@ loafers_rc_t loafers_rc_sys() {
 	return ret;
 }
 
-static loafers_rc_t loafers_get_generic_addr( char **addr, socks_reply_t *reply ) {
-	if( addr == NULL || reply == NULL ) {
-		assert(false);
-		errno = EINVAL;
-		return loafers_rc_sys();
-	}
+static loafers_rc_t loafers_get_generic_addr( loafers_conn_t *conn, char **addr, socks_reply_t *reply, bool *avail_flag ) {
+	assert(conn != NULL && addr != NULL && reply != NULL && avail_flag != NULL);
+
+	if( !*avail_flag ) return loafers_rc(LOAFERS_ERR_NOTAVAIL);
 	int ntop_af;
 	void *ntop_src;
 	socklen_t ntop_size;
@@ -82,39 +80,46 @@ static loafers_rc_t loafers_get_generic_addr( char **addr, socks_reply_t *reply 
 }
 
 loafers_rc_t loafers_get_remote_addr( loafers_conn_t *conn, char **addr ) {
-	if( conn == NULL || addr == NULL || !conn->reply_avail ) {
-		assert(false);
-		errno = EINVAL;
-		return loafers_rc_sys();
-	}
-	return loafers_get_generic_addr(addr, conn->reply);
+	// The remote address is only available when using BIND
+	if( conn->req.cmd != SOCKS_CMD_BIND ) return loafers_rc(LOAFERS_ERR_NOTAVAIL);
+	return loafers_get_generic_addr(conn, addr, conn->reply, &conn->reply_avail);
 }
 
-loafers_rc_t loafers_get_bind_addr( loafers_conn_t *conn, char **addr ) {
-	if( conn == NULL || addr == NULL || !conn->bnd_reply_avail ) {
-		assert(false);
-		errno = EINVAL;
-		return loafers_rc_sys();
-	}
-	return loafers_get_generic_addr(addr, conn->bnd_reply);
+loafers_rc_t loafers_get_external_addr( loafers_conn_t *conn, char **addr ) {
+	// The external address is only available when using CONNECT
+	if( conn->req.cmd != SOCKS_CMD_CONNECT ) return loafers_rc(LOAFERS_ERR_NOTAVAIL);
+	return loafers_get_generic_addr(conn, addr, conn->reply, &conn->reply_avail);
+}
+
+loafers_rc_t loafers_get_listen_addr( loafers_conn_t *conn, char **addr ) {
+	// The listen address is only available when using BIND
+	if( conn->req.cmd != SOCKS_CMD_BIND ) return loafers_rc(LOAFERS_ERR_NOTAVAIL);
+	return loafers_get_generic_addr(conn, addr, conn->bnd_reply, &conn->bnd_reply_avail);
+}
+
+static loafers_rc_t loafers_get_generic_port( loafers_conn_t *conn, in_port_t *port, socks_reply_t *reply, bool *avail_flag ) {
+	assert(port != NULL && conn != NULL && reply != NULL && avail_flag != NULL);
+	if( !*avail_flag ) return loafers_rc(LOAFERS_ERR_NOTAVAIL);
+	*port = reply->bnd_port;
+	return loafers_rc(LOAFERS_ERR_NOERR);
 }
 
 loafers_rc_t loafers_get_remote_port( loafers_conn_t *conn, in_port_t *port ) {
-	if( port == NULL || conn == NULL || !conn->reply_avail ) {
-		errno = EINVAL;
-		return loafers_rc_sys();
-	}
-	*port = conn->reply->bnd_port;
-	return loafers_rc(LOAFERS_ERR_NOERR);
+	// The remote port is only available when using BIND
+	if( conn->req.cmd != SOCKS_CMD_BIND ) return loafers_rc(LOAFERS_ERR_NOTAVAIL);
+	return loafers_get_generic_port(conn, port, conn->reply, &conn->reply_avail);
 }
 
-loafers_rc_t loafers_get_bind_port( loafers_conn_t *conn, in_port_t *port ) {
-	if( port == NULL || conn == NULL || !conn->bnd_reply_avail ) {
-		errno = EINVAL;
-		return loafers_rc_sys();
-	}
-	*port = conn->bnd_reply->bnd_port;
-	return loafers_rc(LOAFERS_ERR_NOERR);
+loafers_rc_t loafers_get_external_port( loafers_conn_t *conn, in_port_t *port ) {
+	// The external port is only available when using CONNECT
+	if( conn->req.cmd != SOCKS_CMD_CONNECT ) return loafers_rc(LOAFERS_ERR_NOTAVAIL);
+	return loafers_get_generic_port(conn, port, conn->reply, &conn->reply_avail);
+}
+
+loafers_rc_t loafers_get_listen_port( loafers_conn_t *conn, in_port_t *port ) {
+	// The listen port is only available when using BIND
+	if( conn->req.cmd != SOCKS_CMD_BIND ) return loafers_rc(LOAFERS_ERR_NOTAVAIL);
+	return loafers_get_generic_port(conn, port, conn->bnd_reply, &conn->bnd_reply_avail);
 }
 
 loafers_rc_t loafers_rc_socks( loafers_err_e err, loafers_err_socks_e socks_err ) {
@@ -155,7 +160,8 @@ const char *loafers_strerror( loafers_rc_t err ) {
 				[LOAFERS_ERR_NEED_WRITE] = "Handshake needs write",
 				[LOAFERS_ERR_ERRNO] = "System error",
 				[LOAFERS_ERR_SOCKS] = "Protocol error",
-				[LOAFERS_ERR_BADSTATE] = "Invalid state machine"
+				[LOAFERS_ERR_BADSTATE] = "Invalid state machine",
+				[LOAFERS_ERR_NOTAVAIL] = "Information not available"
 			};
 			static const size_t noerrors = sizeof(errors) / sizeof(char *);
 			loafers_err_e errnum = loafers_errno(err);
@@ -187,11 +193,7 @@ loafers_rc_t loafers_free_addr_u( socks_atyp_e atyp, socks_addr_u addr ) {
 }
 
 loafers_rc_t loafers_conn_alloc( loafers_conn_t **conn ) {
-	if( conn == NULL ) {
-		assert(false);
-		errno = EINVAL;
-		return loafers_rc_sys();
-	}
+	assert(conn != NULL);
 
 	*conn = malloc(sizeof(loafers_conn_t));
 	if( *conn == NULL ) return loafers_rc_sys();
@@ -201,11 +203,8 @@ loafers_rc_t loafers_conn_alloc( loafers_conn_t **conn ) {
 }
 
 loafers_rc_t loafers_conn_free( loafers_conn_t **conn ) {
-	if( conn == NULL || *conn == NULL ) {
-		assert(false);
-		errno = EINVAL;
-		return loafers_rc_sys();
-	}
+	assert(conn != NULL && *conn != NULL);
+
 	loafers_conn_t *c = *conn;
 	if( c->ver.methods != NULL ) free(c->ver.methods);
 	if( c->buf != NULL ) free(c->buf);
@@ -239,11 +238,7 @@ static void loafers_set_prepared( loafers_conn_t *conn ) {
 }
 
 loafers_rc_t loafers_set_version( loafers_conn_t *conn, socks_version_e version ) {
-	if( conn == NULL ) {
-		assert(false);
-		errno = EINVAL;
-		return loafers_rc_sys();
-	}
+	assert(conn != NULL);
 
 	conn->ver.ver = version;
 	conn->req.ver = version;
@@ -253,11 +248,7 @@ loafers_rc_t loafers_set_version( loafers_conn_t *conn, socks_version_e version 
 }
 
 loafers_rc_t loafers_set_methods( loafers_conn_t *conn, uint8_t nmethods, const socks_method_e methods[static nmethods] ) {
-	if( conn == NULL || methods == NULL ) {
-		assert(false);
-		errno = EINVAL;
-		return loafers_rc_sys();
-	}
+	assert(conn != NULL && methods != NULL);
 
 	if( conn->ver.methods != NULL ) free(conn->ver.methods);
 	conn->ver.methods = calloc(sizeof(socks_method_e), nmethods);
@@ -269,11 +260,7 @@ loafers_rc_t loafers_set_methods( loafers_conn_t *conn, uint8_t nmethods, const 
 }
 
 loafers_rc_t loafers_set_command( loafers_conn_t *conn, socks_cmd_e cmd ) {
-	if( conn == NULL ) {
-		assert(false);
-		errno = EINVAL;
-		return loafers_rc_sys();
-	}
+	assert(conn != NULL);
 
 	conn->req.cmd = cmd;
 	loafers_set_prepared(conn);
@@ -281,11 +268,7 @@ loafers_rc_t loafers_set_command( loafers_conn_t *conn, socks_cmd_e cmd ) {
 }
 
 static loafers_rc_t loafers_set_atyp( loafers_conn_t *conn, socks_atyp_e atyp ) {
-	if( conn == NULL ) {
-		assert(false);
-		errno = EINVAL;
-		return loafers_rc_sys();
-	}
+	assert(conn != NULL);
 
 	conn->req.atyp = atyp;
 	loafers_set_prepared(conn);
@@ -293,11 +276,7 @@ static loafers_rc_t loafers_set_atyp( loafers_conn_t *conn, socks_atyp_e atyp ) 
 }
 
 loafers_rc_t loafers_set_hostname( loafers_conn_t *conn, const char *hostname, in_port_t port ) {
-	if( conn == NULL || hostname == NULL ) {
-		assert(false);
-		errno = EINVAL;
-		return loafers_rc_sys();
-	}
+	assert(conn != NULL && hostname != NULL);
 
 	socks_request_t *req = &conn->req;
 	loafers_rc_t rc = loafers_set_atyp(conn, SOCKS_ATYP_HOSTNAME);
@@ -313,11 +292,7 @@ loafers_rc_t loafers_set_hostname( loafers_conn_t *conn, const char *hostname, i
 }
 
 loafers_rc_t loafers_set_sockaddr( loafers_conn_t *conn, const struct sockaddr *address ) {
-	if( conn == NULL || address == NULL ) {
-		assert(false);
-		errno = EINVAL;
-		return loafers_rc_sys();
-	}
+	assert(conn != NULL && address != NULL);
 
 	socks_request_t *req = &conn->req;
 	loafers_rc_t rc;
