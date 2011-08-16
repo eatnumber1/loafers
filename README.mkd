@@ -10,7 +10,8 @@ To use libloafers, a loafers_conn_t structure must be created and initialized. T
 loafers_conn_t structure provides connection and state information to the
 handshake routines such as hostname and port.
 
-For the moment, the reader is referred to include/loafers.h for the available
-routines.
+For the moment, the reader is referred to
+[include/loafers.h](https://github.com/eatnumber1/loafers/blob/master/include/loafers.h)
+for the available routines.
 
 <!-- vim: set tw=80: -->
