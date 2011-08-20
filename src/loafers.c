@@ -337,3 +337,15 @@ loafers_rc_t loafers_connbuf_alloc( loafers_conn_t *conn, size_t count ) {
 	conn->bufremain = bufsiz;
 	return loafers_rc(LOAFERS_ERR_NOERR);
 }
+
+loafers_rc_t loafers_stream_write( loafers_stream_t *stream, const void *buf, size_t buflen, ssize_t *remain ) {
+	assert(stream != NULL && remain != NULL);
+
+	return loafers_raw_write(stream, buf, buflen, remain);
+}
+
+loafers_rc_t loafers_stream_read( loafers_stream_t *stream, void *buf, size_t buflen, ssize_t *remain ) {
+	assert(stream != NULL && remain != NULL);
+
+	return loafers_raw_read(stream, buf, buflen, remain);
+}

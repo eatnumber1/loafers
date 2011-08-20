@@ -36,6 +36,22 @@ static const loafers_state_handler loafers_state_handlers[] = {
 };
 static const size_t loafers_nostates = sizeof(loafers_state_handlers) / sizeof(loafers_state_handler);
 
+static loafers_rc_t loafers_conn_write( loafers_stream_t *stream, loafers_conn_t *conn ) {
+	ssize_t remain;
+	loafers_rc_t rc = loafers_raw_write(stream, conn->bufptr, conn->bufremain, &remain);
+	conn->bufptr += conn->bufremain - remain;
+	conn->bufremain -= remain;
+	return rc;
+}
+
+static loafers_rc_t loafers_conn_read( loafers_stream_t *stream, loafers_conn_t *conn ) {
+	ssize_t remain;
+	loafers_rc_t rc = loafers_raw_read(stream, conn->bufptr, conn->bufremain, &remain);
+	conn->bufptr += conn->bufremain - remain;
+	conn->bufremain -= remain;
+	return rc;
+}
+
 static loafers_rc_t loafers_conn_version_prepare( loafers_conn_t *conn, loafers_stream_t *stream ) {
 	(void) stream;
 	loafers_rc_t rc;

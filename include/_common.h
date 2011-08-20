@@ -96,7 +96,7 @@ loafers_rc_t loafers_rc_socks( loafers_err_e err, loafers_err_socks_e socks_err 
 
 loafers_rc_t loafers_connbuf_alloc( loafers_conn_t *conn, size_t count );
 
-loafers_rc_t loafers_conn_write( loafers_stream_t *stream, loafers_conn_t *conn );
-loafers_rc_t loafers_conn_read( loafers_stream_t *stream, loafers_conn_t *conn );
+loafers_rc_t loafers_raw_read( loafers_stream_t *stream, void *buf, size_t buflen, ssize_t *remain );
+loafers_rc_t loafers_raw_write( loafers_stream_t *stream, const void *buf, size_t buflen, ssize_t *remain );
 
 #endif

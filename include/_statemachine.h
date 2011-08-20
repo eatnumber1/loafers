@@ -1,6 +1,9 @@
 #ifndef ___STATEMACHINE_H__
 #define ___STATEMACHINE_H__
 
+static loafers_rc_t loafers_conn_write( loafers_stream_t *stream, loafers_conn_t *conn );
+static loafers_rc_t loafers_conn_read( loafers_stream_t *stream, loafers_conn_t *conn );
+
 static loafers_rc_t loafers_conn_version_prepare( loafers_conn_t *conn, loafers_stream_t *stream );
 static loafers_rc_t loafers_conn_version_sending( loafers_conn_t *conn, loafers_stream_t *stream );
 static loafers_rc_t loafers_conn_methodsel_prepare( loafers_conn_t *conn, loafers_stream_t *stream );

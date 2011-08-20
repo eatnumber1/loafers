@@ -90,7 +90,9 @@ __attribute__((visibility("default"))) loafers_rc_t
 __attribute__((visibility("default"))) loafers_rc_t
 	loafers_stream_socket_alloc( loafers_stream_t **stream, int sockfd ),
 	loafers_stream_custom_alloc( loafers_stream_t **stream, void *data, loafers_stream_writer_f writer, loafers_stream_reader_f reader, void *error ),
-	loafers_stream_free( loafers_stream_t **stream );
+	loafers_stream_free( loafers_stream_t **stream ),
+	loafers_stream_write( loafers_stream_t *stream, const void *buf, size_t buflen, ssize_t *remain ),
+	loafers_stream_read( loafers_stream_t *stream, void *buf, size_t buflen, ssize_t *remain );
 
 __attribute__((visibility("default"))) void *loafers_get_stream_error( const loafers_stream_t *stream );
 

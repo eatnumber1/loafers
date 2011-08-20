@@ -114,18 +114,10 @@ static loafers_rc_t loafers_stream_read_socket( void *d, void *buf, size_t bufle
 	return rc;
 }
 
-loafers_rc_t loafers_conn_write( loafers_stream_t *stream, loafers_conn_t *conn ) {
-	ssize_t remain;
-	loafers_rc_t rc = stream->write(stream->data, conn->bufptr, conn->bufremain, &remain, stream->error);
-	conn->bufptr += conn->bufremain - remain;
-	conn->bufremain -= remain;
-	return rc;
+loafers_rc_t loafers_raw_write( loafers_stream_t *stream, const void *buf, size_t buflen, ssize_t *remain ) {
+	return stream->write(stream->data, buf, buflen, remain, stream->error);
 }
 
-loafers_rc_t loafers_conn_read( loafers_stream_t *stream, loafers_conn_t *conn ) {
-	ssize_t remain;
-	loafers_rc_t rc = stream->read(stream->data, conn->bufptr, conn->bufremain, &remain, stream->error);
-	conn->bufptr += conn->bufremain - remain;
-	conn->bufremain -= remain;
-	return rc;
+loafers_rc_t loafers_raw_read( loafers_stream_t *stream, void *buf, size_t buflen, ssize_t *remain ) {
+	return stream->read(stream->data, buf, buflen, remain, stream->error);
 }

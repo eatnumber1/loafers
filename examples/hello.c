@@ -5,6 +5,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
+#include <assert.h>
+#include <unistd.h>
 
 #include <loafers.h>
 
@@ -70,21 +72,22 @@ int main( int argc, char *argv[] ) {
 		fprintf(stderr, "loafers_handshake: %s\n", loafers_strerror(rc));
 		exit(EXIT_FAILURE);
 	}
-	if( loafers_errno(rc = loafers_stream_free(&stream)) != LOAFERS_ERR_NOERR ) {
-		fprintf(stderr, "loafers_stream_free: %s\n", loafers_strerror(rc));
-		exit(EXIT_FAILURE);
-	}
 	if( loafers_errno(rc = loafers_conn_free(&conn)) != LOAFERS_ERR_NOERR ) {
 		fprintf(stderr, "loafers_conn_free: %s\n", loafers_strerror(rc));
 		exit(EXIT_FAILURE);
 	}
 
-	FILE *s = fdopen(sock, "a+");
-	if( s == NULL ) {
-		perror("fdopen");
+	const char *hello = "Hello World!\n";
+	ssize_t remain;
+	if( loafers_errno(rc = loafers_stream_write(stream, hello, strlen(hello) + 1, &remain)) != LOAFERS_ERR_NOERR ) {
+		fprintf(stderr, "loafers_stream_write: %s\n", loafers_strerror(rc));
 		exit(EXIT_FAILURE);
 	}
-	fprintf(s, "Hello World!\n");
-	fclose(s);
+	assert(remain == 0);
+	if( loafers_errno(rc = loafers_stream_free(&stream)) != LOAFERS_ERR_NOERR ) {
+		fprintf(stderr, "loafers_stream_free: %s\n", loafers_strerror(rc));
+		exit(EXIT_FAILURE);
+	}
+	close(sock);
 	return EXIT_SUCCESS;
 }
