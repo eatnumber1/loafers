@@ -36,63 +36,8 @@ static const loafers_state_handler loafers_state_handlers[] = {
 };
 static const size_t loafers_nostates = sizeof(loafers_state_handlers) / sizeof(loafers_state_handler);
 
-static loafers_rc_t loafers_write( int fd, loafers_conn_t *conn ) {
-	uint8_t *bufptr = conn->bufptr;
-	size_t bufremain = conn->bufremain;
-
-	loafers_rc_t rc = loafers_rc(LOAFERS_ERR_NOERR);
-	do {
-		ssize_t ret = write(fd, bufptr, bufremain);
-		if( ret == -1 ) {
-			if( errno == EINTR ) {
-				continue;
-			} else if( errno == EAGAIN || errno == EWOULDBLOCK ) {
-				rc = loafers_rc(LOAFERS_ERR_NEED_WRITE);
-			} else {
-				rc = loafers_rc_sys();
-			}
-			break;
-		}
-		bufremain -= ret;
-		bufptr += ret;
-	} while( bufremain != 0 );
-
-	conn->bufremain = bufremain;
-	conn->bufptr = bufptr;
-	return rc;
-}
-
-static loafers_rc_t loafers_read( int fd, loafers_conn_t *conn ) {
-	uint8_t *bufptr = conn->bufptr;
-	size_t bufremain = conn->bufremain;
-
-	loafers_rc_t rc = loafers_rc(LOAFERS_ERR_NOERR);
-	do {
-		ssize_t ret = read(fd, bufptr, bufremain);
-		if( ret == -1 ) {
-			if( errno == EINTR ) {
-				continue;
-			} else if( errno == EAGAIN || errno == EWOULDBLOCK ) {
-				rc = loafers_rc(LOAFERS_ERR_NEED_READ);
-			} else {
-				rc = loafers_rc_sys();
-			}
-			break;
-		} else if( ret == 0 ) {
-			rc = loafers_rc(LOAFERS_ERR_EOF);
-			break;
-		}
-		bufremain -= ret;
-		bufptr += ret;
-	} while( bufremain != 0 );
-
-	conn->bufremain = bufremain;
-	conn->bufptr = bufptr;
-	return rc;
-}
-
-static loafers_rc_t loafers_conn_version_prepare( loafers_conn_t *conn, int sockfd ) {
-	(void) sockfd;
+static loafers_rc_t loafers_conn_version_prepare( loafers_conn_t *conn, loafers_stream_t *stream ) {
+	(void) stream;
 	loafers_rc_t rc;
 	socks_version_t *ver = &conn->ver;
 	if( loafers_errno(rc = loafers_connbuf_alloc(conn, ver->nmethods + (2 * sizeof(uint8_t)))) != LOAFERS_ERR_NOERR ) return rc;
@@ -105,24 +50,24 @@ static loafers_rc_t loafers_conn_version_prepare( loafers_conn_t *conn, int sock
 	return loafers_rc(LOAFERS_ERR_NOERR);
 }
 
-static loafers_rc_t loafers_conn_version_sending( loafers_conn_t *conn, int sockfd ) {
+static loafers_rc_t loafers_conn_version_sending( loafers_conn_t *conn, loafers_stream_t *stream ) {
 	loafers_rc_t rc;
-	if( loafers_errno(rc = loafers_write(sockfd, conn)) != LOAFERS_ERR_NOERR ) return rc;
+	if( loafers_errno(rc = loafers_conn_write(stream, conn)) != LOAFERS_ERR_NOERR ) return rc;
 	conn->state = LOAFERS_CONN_METHODSEL_PREPARE;
 	return loafers_rc(LOAFERS_ERR_NOERR);
 }
 
-static loafers_rc_t loafers_conn_methodsel_prepare( loafers_conn_t *conn, int sockfd ) {
-	(void) sockfd;
+static loafers_rc_t loafers_conn_methodsel_prepare( loafers_conn_t *conn, loafers_stream_t *stream ) {
+	(void) stream;
 	loafers_rc_t rc;
 	if( loafers_errno(rc = loafers_connbuf_alloc(conn, 2 * sizeof(uint8_t))) != LOAFERS_ERR_NOERR ) return rc;
 	conn->state = LOAFERS_CONN_METHODSEL_READING;
 	return loafers_rc(LOAFERS_ERR_NOERR);
 }
 
-static loafers_rc_t loafers_conn_methodsel_reading( loafers_conn_t *conn, int sockfd ) {
+static loafers_rc_t loafers_conn_methodsel_reading( loafers_conn_t *conn, loafers_stream_t *stream ) {
 	loafers_rc_t rc;
-	if( loafers_errno(rc = loafers_read(sockfd, conn)) != LOAFERS_ERR_NOERR ) return rc;
+	if( loafers_errno(rc = loafers_conn_read(stream, conn)) != LOAFERS_ERR_NOERR ) return rc;
 	if( conn->buf[0] != conn->ver.ver ) {
 		conn->state = LOAFERS_CONN_INVALID;
 		return loafers_rc(LOAFERS_ERR_BADPACKET);
@@ -131,8 +76,8 @@ static loafers_rc_t loafers_conn_methodsel_reading( loafers_conn_t *conn, int so
 	return loafers_rc(LOAFERS_ERR_NOERR);
 }
 
-static loafers_rc_t loafers_conn_request_prepare( loafers_conn_t *conn, int sockfd ) {
-	(void) sockfd;
+static loafers_rc_t loafers_conn_request_prepare( loafers_conn_t *conn, loafers_stream_t *stream ) {
+	(void) stream;
 	loafers_rc_t rc;
 	socks_request_t *req = &conn->req;
 	size_t addrsiz = req->addrsiz;
@@ -166,15 +111,15 @@ static loafers_rc_t loafers_conn_request_prepare( loafers_conn_t *conn, int sock
 	return loafers_rc(LOAFERS_ERR_NOERR);
 }
 
-static loafers_rc_t loafers_conn_request_sending( loafers_conn_t *conn, int sockfd ) {
+static loafers_rc_t loafers_conn_request_sending( loafers_conn_t *conn, loafers_stream_t *stream ) {
 	loafers_rc_t rc;
-	if( loafers_errno(rc = loafers_write(sockfd, conn)) != LOAFERS_ERR_NOERR ) return rc;
+	if( loafers_errno(rc = loafers_conn_write(stream, conn)) != LOAFERS_ERR_NOERR ) return rc;
 	conn->state = conn->req.cmd == SOCKS_CMD_BIND ? LOAFERS_CONN_BIND_REPLY_HEADER_PREPARE : LOAFERS_CONN_REPLY_HEADER_PREPARE;
 	return loafers_rc(LOAFERS_ERR_NOERR);
 }
 
-static loafers_rc_t loafers_conn_generic_reply_header_prepare( loafers_conn_t *conn, int sockfd, bool *avail_flag, socks_reply_t **reply, loafers_conn_e next_state ) {
-	(void) sockfd;
+static loafers_rc_t loafers_conn_generic_reply_header_prepare( loafers_conn_t *conn, loafers_stream_t *stream, bool *avail_flag, socks_reply_t **reply, loafers_conn_e next_state ) {
+	(void) stream;
 	loafers_rc_t rc;
 	*avail_flag = false;
 	if( loafers_errno(rc = loafers_connbuf_alloc(conn, 4 * sizeof(uint8_t))) != LOAFERS_ERR_NOERR ) return rc;
@@ -185,18 +130,18 @@ static loafers_rc_t loafers_conn_generic_reply_header_prepare( loafers_conn_t *c
 	return loafers_rc(LOAFERS_ERR_NOERR);
 }
 
-static loafers_rc_t loafers_conn_reply_header_prepare( loafers_conn_t *conn, int sockfd ) {
-	return loafers_conn_generic_reply_header_prepare(conn, sockfd, &conn->reply_avail, &conn->reply, LOAFERS_CONN_REPLY_HEADER_READING);
+static loafers_rc_t loafers_conn_reply_header_prepare( loafers_conn_t *conn, loafers_stream_t *stream ) {
+	return loafers_conn_generic_reply_header_prepare(conn, stream, &conn->reply_avail, &conn->reply, LOAFERS_CONN_REPLY_HEADER_READING);
 }
 
-static loafers_rc_t loafers_conn_bind_reply_header_prepare( loafers_conn_t *conn, int sockfd ) {
-	return loafers_conn_generic_reply_header_prepare(conn, sockfd, &conn->bnd_reply_avail, &conn->bnd_reply, LOAFERS_CONN_BIND_REPLY_HEADER_READING);
+static loafers_rc_t loafers_conn_bind_reply_header_prepare( loafers_conn_t *conn, loafers_stream_t *stream ) {
+	return loafers_conn_generic_reply_header_prepare(conn, stream, &conn->bnd_reply_avail, &conn->bnd_reply, LOAFERS_CONN_BIND_REPLY_HEADER_READING);
 }
 
 // next_states must contain the equivalent of { LOAFERS_CONN_REPLY_PREPARE, LOAFERS_CONN_REPLY_HEADER_HOSTLEN_PREPARE }
-static loafers_rc_t loafers_conn_generic_reply_header_reading( loafers_conn_t *conn, int sockfd, socks_reply_t *reply, const loafers_conn_e next_states[const static 2] ) {
+static loafers_rc_t loafers_conn_generic_reply_header_reading( loafers_conn_t *conn, loafers_stream_t *stream, socks_reply_t *reply, const loafers_conn_e next_states[const static 2] ) {
 	loafers_rc_t rc;
-	if( loafers_errno(rc = loafers_read(sockfd, conn)) != LOAFERS_ERR_NOERR ) return rc;
+	if( loafers_errno(rc = loafers_conn_read(stream, conn)) != LOAFERS_ERR_NOERR ) return rc;
 	reply->ver = conn->buf[0];
 	reply->rep = conn->buf[1];
 	assert(conn->buf[2] == 0x00);
@@ -230,56 +175,56 @@ static loafers_rc_t loafers_conn_generic_reply_header_reading( loafers_conn_t *c
 	return loafers_rc(LOAFERS_ERR_NOERR);
 }
 
-static loafers_rc_t loafers_conn_reply_header_reading( loafers_conn_t *conn, int sockfd ) {
+static loafers_rc_t loafers_conn_reply_header_reading( loafers_conn_t *conn, loafers_stream_t *stream ) {
 	static const loafers_conn_e states[2] = {
 		LOAFERS_CONN_REPLY_PREPARE,
 		LOAFERS_CONN_REPLY_HEADER_HOSTLEN_PREPARE
 	};
-	return loafers_conn_generic_reply_header_reading(conn, sockfd, conn->reply, states);
+	return loafers_conn_generic_reply_header_reading(conn, stream, conn->reply, states);
 }
 
-static loafers_rc_t loafers_conn_bind_reply_header_reading( loafers_conn_t *conn, int sockfd ) {
+static loafers_rc_t loafers_conn_bind_reply_header_reading( loafers_conn_t *conn, loafers_stream_t *stream ) {
 	static const loafers_conn_e states[2] = {
 		LOAFERS_CONN_BIND_REPLY_PREPARE,
 		LOAFERS_CONN_BIND_REPLY_HEADER_HOSTLEN_PREPARE
 	};
-	return loafers_conn_generic_reply_header_reading(conn, sockfd, conn->bnd_reply, states);
+	return loafers_conn_generic_reply_header_reading(conn, stream, conn->bnd_reply, states);
 }
 
-static loafers_rc_t loafers_conn_generic_reply_header_hostlen_prepare( loafers_conn_t *conn, int sockfd, loafers_conn_e next_state ) {
-	(void) sockfd;
+static loafers_rc_t loafers_conn_generic_reply_header_hostlen_prepare( loafers_conn_t *conn, loafers_stream_t *stream, loafers_conn_e next_state ) {
+	(void) stream;
 	loafers_rc_t rc;
 	if( loafers_errno(rc = loafers_connbuf_alloc(conn, sizeof(uint8_t))) != LOAFERS_ERR_NOERR ) return rc;
 	conn->state = next_state;
 	return loafers_rc(LOAFERS_ERR_NOERR);
 }
 
-static loafers_rc_t loafers_conn_reply_header_hostlen_prepare( loafers_conn_t *conn, int sockfd ) {
-	return loafers_conn_generic_reply_header_hostlen_prepare(conn, sockfd, LOAFERS_CONN_REPLY_HEADER_HOSTLEN_READING);
+static loafers_rc_t loafers_conn_reply_header_hostlen_prepare( loafers_conn_t *conn, loafers_stream_t *stream ) {
+	return loafers_conn_generic_reply_header_hostlen_prepare(conn, stream, LOAFERS_CONN_REPLY_HEADER_HOSTLEN_READING);
 }
 
-static loafers_rc_t loafers_conn_bind_reply_header_hostlen_prepare( loafers_conn_t *conn, int sockfd ) {
-	return loafers_conn_generic_reply_header_hostlen_prepare(conn, sockfd, LOAFERS_CONN_BIND_REPLY_HEADER_HOSTLEN_READING);
+static loafers_rc_t loafers_conn_bind_reply_header_hostlen_prepare( loafers_conn_t *conn, loafers_stream_t *stream ) {
+	return loafers_conn_generic_reply_header_hostlen_prepare(conn, stream, LOAFERS_CONN_BIND_REPLY_HEADER_HOSTLEN_READING);
 }
 
-static loafers_rc_t loafers_conn_generic_reply_header_hostlen_reading( loafers_conn_t *conn, int sockfd, loafers_conn_e next_state ) {
+static loafers_rc_t loafers_conn_generic_reply_header_hostlen_reading( loafers_conn_t *conn, loafers_stream_t *stream, loafers_conn_e next_state ) {
 	loafers_rc_t rc;
-	if( loafers_errno(rc = loafers_read(sockfd, conn)) != LOAFERS_ERR_NOERR ) return rc;
+	if( loafers_errno(rc = loafers_conn_read(stream, conn)) != LOAFERS_ERR_NOERR ) return rc;
 	*((uint8_t *) conn->data) = conn->buf[0];
 	conn->state = next_state;
 	return loafers_rc(LOAFERS_ERR_NOERR);
 }
 
-static loafers_rc_t loafers_conn_reply_header_hostlen_reading( loafers_conn_t *conn, int sockfd ) {
-	return loafers_conn_generic_reply_header_hostlen_reading(conn, sockfd, LOAFERS_CONN_REPLY_PREPARE);
+static loafers_rc_t loafers_conn_reply_header_hostlen_reading( loafers_conn_t *conn, loafers_stream_t *stream ) {
+	return loafers_conn_generic_reply_header_hostlen_reading(conn, stream, LOAFERS_CONN_REPLY_PREPARE);
 }
 
-static loafers_rc_t loafers_conn_bind_reply_header_hostlen_reading( loafers_conn_t *conn, int sockfd ) {
-	return loafers_conn_generic_reply_header_hostlen_reading(conn, sockfd, LOAFERS_CONN_BIND_REPLY_PREPARE);
+static loafers_rc_t loafers_conn_bind_reply_header_hostlen_reading( loafers_conn_t *conn, loafers_stream_t *stream ) {
+	return loafers_conn_generic_reply_header_hostlen_reading(conn, stream, LOAFERS_CONN_BIND_REPLY_PREPARE);
 }
 
-static loafers_rc_t loafers_conn_generic_reply_prepare( loafers_conn_t *conn, int sockfd, socks_reply_t *reply, loafers_conn_e next_state ) {
-	(void) sockfd;
+static loafers_rc_t loafers_conn_generic_reply_prepare( loafers_conn_t *conn, loafers_stream_t *stream, socks_reply_t *reply, loafers_conn_e next_state ) {
+	(void) stream;
 	loafers_rc_t rc;
 	uint8_t buflen = *((uint8_t *) conn->data);
 	if( loafers_errno(rc = loafers_connbuf_alloc(conn, buflen + sizeof(uint16_t))) != LOAFERS_ERR_NOERR ) return rc;
@@ -307,18 +252,18 @@ static loafers_rc_t loafers_conn_generic_reply_prepare( loafers_conn_t *conn, in
 	return loafers_rc(LOAFERS_ERR_NOERR);
 }
 
-static loafers_rc_t loafers_conn_reply_prepare( loafers_conn_t *conn, int sockfd ) {
-	return loafers_conn_generic_reply_prepare(conn, sockfd, conn->reply, LOAFERS_CONN_REPLY_READING);
+static loafers_rc_t loafers_conn_reply_prepare( loafers_conn_t *conn, loafers_stream_t *stream ) {
+	return loafers_conn_generic_reply_prepare(conn, stream, conn->reply, LOAFERS_CONN_REPLY_READING);
 }
 
-static loafers_rc_t loafers_conn_bind_reply_prepare( loafers_conn_t *conn, int sockfd ) {
-	return loafers_conn_generic_reply_prepare(conn, sockfd, conn->bnd_reply, LOAFERS_CONN_BIND_REPLY_READING);
+static loafers_rc_t loafers_conn_bind_reply_prepare( loafers_conn_t *conn, loafers_stream_t *stream ) {
+	return loafers_conn_generic_reply_prepare(conn, stream, conn->bnd_reply, LOAFERS_CONN_BIND_REPLY_READING);
 }
 
-static loafers_rc_t loafers_conn_generic_reply_reading( loafers_conn_t *conn, int sockfd, bool *avail_flag, socks_reply_t *reply, loafers_conn_e next_state ) {
+static loafers_rc_t loafers_conn_generic_reply_reading( loafers_conn_t *conn, loafers_stream_t *stream, bool *avail_flag, socks_reply_t *reply, loafers_conn_e next_state ) {
 	loafers_rc_t rc;
 	uint8_t buflen = *((uint8_t *) conn->data);
-	if( loafers_errno(rc = loafers_read(sockfd, conn)) != LOAFERS_ERR_NOERR ) return rc;
+	if( loafers_errno(rc = loafers_conn_read(stream, conn)) != LOAFERS_ERR_NOERR ) return rc;
 	void *s1;
 	switch( reply->atyp ) {
 		case SOCKS_ATYP_IPV6:
@@ -342,22 +287,22 @@ static loafers_rc_t loafers_conn_generic_reply_reading( loafers_conn_t *conn, in
 	return loafers_rc(LOAFERS_ERR_NOERR);
 }
 
-static loafers_rc_t loafers_conn_reply_reading( loafers_conn_t *conn, int sockfd ) {
-	return loafers_conn_generic_reply_reading(conn, sockfd, &conn->reply_avail, conn->reply, LOAFERS_CONN_CONNECTED);
+static loafers_rc_t loafers_conn_reply_reading( loafers_conn_t *conn, loafers_stream_t *stream ) {
+	return loafers_conn_generic_reply_reading(conn, stream, &conn->reply_avail, conn->reply, LOAFERS_CONN_CONNECTED);
 }
 
-static loafers_rc_t loafers_conn_bind_reply_reading( loafers_conn_t *conn, int sockfd ) {
+static loafers_rc_t loafers_conn_bind_reply_reading( loafers_conn_t *conn, loafers_stream_t *stream ) {
 	loafers_rc_t rc;
-	if( loafers_errno(rc = loafers_conn_generic_reply_reading(conn, sockfd, &conn->bnd_reply_avail, conn->bnd_reply, LOAFERS_CONN_REPLY_HEADER_PREPARE)) != LOAFERS_ERR_NOERR ) return rc;
+	if( loafers_errno(rc = loafers_conn_generic_reply_reading(conn, stream, &conn->bnd_reply_avail, conn->bnd_reply, LOAFERS_CONN_REPLY_HEADER_PREPARE)) != LOAFERS_ERR_NOERR ) return rc;
 	return loafers_rc(LOAFERS_ERR_NOERR_BINDWAIT);
 }
 
-loafers_rc_t loafers_handshake( loafers_conn_t *conn, int sockfd ) {
+loafers_rc_t loafers_handshake( loafers_conn_t *conn, loafers_stream_t *stream ) {
 	assert(conn != NULL);
 
 	while( conn->state != LOAFERS_CONN_CONNECTED ) {
 		if( conn->state >= loafers_nostates ) return loafers_rc(LOAFERS_ERR_BADSTATE);
-		loafers_rc_t rc = loafers_state_handlers[conn->state](conn, sockfd);
+		loafers_rc_t rc = loafers_state_handlers[conn->state](conn, stream);
 		if( loafers_errno(rc) != LOAFERS_ERR_NOERR ) return rc;
 	}
 	return loafers_rc(LOAFERS_ERR_NOERR);

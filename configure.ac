@@ -23,5 +23,8 @@ AC_TYPE_UINT8_T
 AC_FUNC_MALLOC
 AC_CHECK_FUNCS([bzero dup2 socket strdup])
 
+# Checks for talloc library
+PKG_CHECK_MODULES([TALLOC], [talloc])
+
 AC_CONFIG_FILES([Makefile examples/Makefile loafers.pc])
 AC_OUTPUT

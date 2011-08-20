@@ -29,7 +29,9 @@ typedef enum {
 	LOAFERS_ERR_ERRNO,
 	LOAFERS_ERR_SOCKS,
 	LOAFERS_ERR_BADSTATE,
-	LOAFERS_ERR_NOTAVAIL
+	LOAFERS_ERR_NOTAVAIL,
+	LOAFERS_ERR_STREAM,
+	LOAFERS_ERR_TALLOC
 } loafers_err_e;
 
 typedef enum {
@@ -53,12 +55,21 @@ typedef struct {
 	};
 } loafers_rc_t;
 
+typedef loafers_rc_t (*loafers_stream_writer_f)( void *, const void *, size_t, ssize_t *, void * );
+typedef loafers_rc_t (*loafers_stream_reader_f)( void *, void *, size_t, ssize_t *, void * );
+
+struct _loafers_stream_t;
+typedef struct _loafers_stream_t loafers_stream_t;
+
 struct _loafers_conn_t;
 typedef struct _loafers_conn_t loafers_conn_t;
 
 __attribute__((visibility("default"))) loafers_err_e loafers_errno( loafers_rc_t err );
 __attribute__((visibility("default"))) loafers_err_socks_e loafers_socks_errno( loafers_rc_t err );
 __attribute__((visibility("default"))) int loafers_sys_errno( loafers_rc_t err );
+__attribute__((visibility("default"))) loafers_rc_t
+	loafers_rc( loafers_err_e err ),
+	loafers_rc_sys();
 
 __attribute__((visibility("default"))) const char *loafers_strerror( loafers_rc_t err );
 __attribute__((visibility("default"))) loafers_rc_t
@@ -76,6 +87,13 @@ __attribute__((visibility("default"))) loafers_rc_t
 	loafers_get_listen_addr( loafers_conn_t *conn, char **addr ),
 	loafers_get_listen_port( loafers_conn_t *conn, in_port_t *port );
 
-__attribute__((visibility("default"))) loafers_rc_t loafers_handshake( loafers_conn_t *conn, int sockfd );
+__attribute__((visibility("default"))) loafers_rc_t
+	loafers_stream_socket_alloc( loafers_stream_t **stream, int sockfd ),
+	loafers_stream_custom_alloc( loafers_stream_t **stream, void *data, loafers_stream_writer_f writer, loafers_stream_reader_f reader, void *error ),
+	loafers_stream_free( loafers_stream_t **stream );
+
+__attribute__((visibility("default"))) void *loafers_get_stream_error( const loafers_stream_t *stream );
+
+__attribute__((visibility("default"))) loafers_rc_t loafers_handshake( loafers_conn_t *conn, loafers_stream_t *stream );
 
 #endif

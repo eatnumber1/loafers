@@ -20,23 +20,19 @@ static loafers_conn_t *make_conn( socks_cmd_e cmd, char *hostname, char *port ) 
 	}
 	if( loafers_errno(rc = loafers_set_version(conn, SOCKS_VERSION_5)) != LOAFERS_ERR_NOERR ) {
 		fprintf(stderr, "loafers_set_version: %s\n", loafers_strerror(rc));
-		loafers_conn_free(&conn);
 		exit(EXIT_FAILURE);
 	}
 	socks_method_e methods[] = { SOCKS_METHOD_NONE };
 	if( loafers_errno(rc = loafers_set_methods(conn, 1, methods)) != LOAFERS_ERR_NOERR ) {
 		fprintf(stderr, "loafers_set_methods: %s\n", loafers_strerror(rc));
-		loafers_conn_free(&conn);
 		exit(EXIT_FAILURE);
 	}
 	if( loafers_errno(rc = loafers_set_command(conn, cmd)) != LOAFERS_ERR_NOERR ) {
 		fprintf(stderr, "loafers_set_command: %s\n", loafers_strerror(rc));
-		loafers_conn_free(&conn);
 		exit(EXIT_FAILURE);
 	}
 	if( loafers_errno(rc = loafers_set_hostname(conn, hostname, htons(atoi(port)))) != LOAFERS_ERR_NOERR ) {
 		fprintf(stderr, "loafers_set_hostname: %s\n", loafers_strerror(rc));
-		loafers_conn_free(&conn);
 		exit(EXIT_FAILURE);
 	}
 	return conn;
@@ -80,6 +76,24 @@ static char *addrinfo_to_str( const struct addrinfo *info ) {
 	return ret;
 }
 
+static loafers_stream_t *make_stream( int sock ) {
+	loafers_rc_t rc;
+	loafers_stream_t *stream;
+	if( loafers_errno(rc = loafers_stream_socket_alloc(&stream, sock)) != LOAFERS_ERR_NOERR ) {
+		fprintf(stderr, "loafers_stream_socket_alloc: %s\n", loafers_strerror(rc));
+		exit(EXIT_FAILURE);
+	}
+	return stream;
+}
+
+static void free_stream( loafers_stream_t *stream ) {
+	loafers_rc_t rc;
+	if( loafers_errno(rc = loafers_stream_free(&stream)) != LOAFERS_ERR_NOERR ) {
+		fprintf(stderr, "loafers_stream_free: %s\n", loafers_strerror(rc));
+		exit(EXIT_FAILURE);
+	}
+}
+
 static int listen_connect( char *argv[] ) {
 	int sock = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
 	if( sock == -1 ) {
@@ -94,11 +108,11 @@ static int listen_connect( char *argv[] ) {
 		exit(EXIT_FAILURE);
 	}
 
+	loafers_stream_t *stream = make_stream(sock);
 	loafers_conn_t *conn = make_conn(SOCKS_CMD_CONNECT, argv[3], argv[4]);
 	loafers_rc_t rc;
-	if( loafers_errno(rc = loafers_handshake(conn, sock)) != LOAFERS_ERR_NOERR ) {
+	if( loafers_errno(rc = loafers_handshake(conn, stream)) != LOAFERS_ERR_NOERR ) {
 		fprintf(stderr, "loafers_handshake: %s\n", loafers_strerror(rc));
-		loafers_conn_free(&conn);
 		exit(EXIT_FAILURE);
 	}
 
@@ -115,6 +129,7 @@ static int listen_connect( char *argv[] ) {
 	printf("Connecting to %s:%s via %s:%" PRIu16 "\n", argv[3], argv[4], external_addr, external_port);
 	free(external_addr);
 
+	free_stream(stream);
 	if( loafers_errno(rc = loafers_conn_free(&conn)) != LOAFERS_ERR_NOERR ) {
 		fprintf(stderr, "loafers_conn_free: %s\n", loafers_strerror(rc));
 		exit(EXIT_FAILURE);
@@ -123,7 +138,7 @@ static int listen_connect( char *argv[] ) {
 	return sock;
 }
 
-static int listen_bind( char *argv[], loafers_conn_t **connptr ) {
+static int listen_bind( char *argv[], loafers_conn_t **connptr, loafers_stream_t **listen_stream ) {
 	struct addrinfo hints;
 	bzero(&hints, sizeof(struct addrinfo));
 	hints.ai_family = res->ai_family;
@@ -163,12 +178,13 @@ static int listen_bind( char *argv[], loafers_conn_t **connptr ) {
 	assert(connptr != NULL);
 	*connptr = make_conn(SOCKS_CMD_BIND, argv[3], argv[5]);
 	loafers_conn_t *conn = *connptr;
+	loafers_stream_t *stream = make_stream(sock);
 	loafers_rc_t rc;
-	if( loafers_errno(rc = loafers_handshake(conn, sock)) != LOAFERS_ERR_NOERR_BINDWAIT ) {
+	if( loafers_errno(rc = loafers_handshake(conn, stream)) != LOAFERS_ERR_NOERR_BINDWAIT ) {
 		fprintf(stderr, "loafers_handshake: %s\n", loafers_strerror(rc));
-		loafers_conn_free(&conn);
 		exit(EXIT_FAILURE);
 	}
+	*listen_stream = stream;
 
 	return sock;
 }
@@ -195,7 +211,8 @@ int main( int argc, char *argv[] ) {
 
 	loafers_conn_t *conn;
 	loafers_rc_t rc;
-	int listen_sock = listen_bind(argv, &conn);
+	loafers_stream_t *listen_stream;
+	int listen_sock = listen_bind(argv, &conn, &listen_stream);
 	char *listen_addr;
 	in_port_t listen_port;
 
@@ -218,9 +235,8 @@ int main( int argc, char *argv[] ) {
 	fflush(s);
 	free(listen_addr);
 
-	if( loafers_errno(rc = loafers_handshake(conn, listen_sock)) != LOAFERS_ERR_NOERR ) {
+	if( loafers_errno(rc = loafers_handshake(conn, listen_stream)) != LOAFERS_ERR_NOERR ) {
 		fprintf(stderr, "loafers_handshake: %s\n", loafers_strerror(rc));
-		loafers_conn_free(&conn);
 		exit(EXIT_FAILURE);
 	}
 

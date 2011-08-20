@@ -76,6 +76,7 @@ struct _loafers_conn_t {
 	size_t addrsiz;
 	// Connection state information
 	loafers_conn_e state;
+	// TODO: Get rid of bufptr and bufremain
 	uint8_t *buf, *bufptr;
 	size_t bufremain;
 	bool reply_avail, bnd_reply_avail;
@@ -84,10 +85,18 @@ struct _loafers_conn_t {
 	void *data;
 };
 
-loafers_rc_t loafers_rc( loafers_err_e err );
-loafers_rc_t loafers_rc_sys();
+struct _loafers_stream_t {
+	void *data;
+	void *error;
+	loafers_stream_writer_f write;
+	loafers_stream_reader_f read;
+};
+
 loafers_rc_t loafers_rc_socks( loafers_err_e err, loafers_err_socks_e socks_err );
 
 loafers_rc_t loafers_connbuf_alloc( loafers_conn_t *conn, size_t count );
+
+loafers_rc_t loafers_conn_write( loafers_stream_t *stream, loafers_conn_t *conn );
+loafers_rc_t loafers_conn_read( loafers_stream_t *stream, loafers_conn_t *conn );
 
 #endif

@@ -39,6 +39,7 @@ int main( int argc, char *argv[] ) {
 	freeaddrinfo(res);
 
 	loafers_conn_t *conn;
+	loafers_stream_t *stream;
 	loafers_rc_t rc;
 	if( loafers_errno(rc = loafers_conn_alloc(&conn)) != LOAFERS_ERR_NOERR ) {
 		fprintf(stderr, "loafers_alloc: %s\n", loafers_strerror(rc));
@@ -46,28 +47,31 @@ int main( int argc, char *argv[] ) {
 	}
 	if( loafers_errno(rc = loafers_set_version(conn, SOCKS_VERSION_5)) != LOAFERS_ERR_NOERR ) {
 		fprintf(stderr, "loafers_set_version: %s\n", loafers_strerror(rc));
-		loafers_conn_free(&conn);
 		exit(EXIT_FAILURE);
 	}
 	socks_method_e methods[] = { SOCKS_METHOD_NONE };
 	if( loafers_errno(rc = loafers_set_methods(conn, 1, methods)) != LOAFERS_ERR_NOERR ) {
 		fprintf(stderr, "loafers_set_methods: %s\n", loafers_strerror(rc));
-		loafers_conn_free(&conn);
 		exit(EXIT_FAILURE);
 	}
 	if( loafers_errno(rc = loafers_set_command(conn, SOCKS_CMD_CONNECT)) != LOAFERS_ERR_NOERR ) {
 		fprintf(stderr, "loafers_set_command: %s\n", loafers_strerror(rc));
-		loafers_conn_free(&conn);
 		exit(EXIT_FAILURE);
 	}
 	if( loafers_errno(rc = loafers_set_hostname(conn, argv[3], htons(atoi(argv[4])))) != LOAFERS_ERR_NOERR ) {
 		fprintf(stderr, "loafers_set_hostname: %s\n", loafers_strerror(rc));
-		loafers_conn_free(&conn);
 		exit(EXIT_FAILURE);
 	}
-	if( loafers_errno(rc = loafers_handshake(conn, sock)) != LOAFERS_ERR_NOERR ) {
+	if( loafers_errno(rc = loafers_stream_socket_alloc(&stream, sock)) != LOAFERS_ERR_NOERR ) {
+		fprintf(stderr, "loafers_stream_socket_alloc: %s\n", loafers_strerror(rc));
+		exit(EXIT_FAILURE);
+	}
+	if( loafers_errno(rc = loafers_handshake(conn, stream)) != LOAFERS_ERR_NOERR ) {
 		fprintf(stderr, "loafers_handshake: %s\n", loafers_strerror(rc));
-		loafers_conn_free(&conn);
+		exit(EXIT_FAILURE);
+	}
+	if( loafers_errno(rc = loafers_stream_free(&stream)) != LOAFERS_ERR_NOERR ) {
+		fprintf(stderr, "loafers_stream_free: %s\n", loafers_strerror(rc));
 		exit(EXIT_FAILURE);
 	}
 	if( loafers_errno(rc = loafers_conn_free(&conn)) != LOAFERS_ERR_NOERR ) {

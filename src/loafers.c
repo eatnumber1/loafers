@@ -161,7 +161,9 @@ const char *loafers_strerror( loafers_rc_t err ) {
 				[LOAFERS_ERR_ERRNO] = "System error",
 				[LOAFERS_ERR_SOCKS] = "Protocol error",
 				[LOAFERS_ERR_BADSTATE] = "Invalid state machine",
-				[LOAFERS_ERR_NOTAVAIL] = "Information not available"
+				[LOAFERS_ERR_NOTAVAIL] = "Information not available",
+				[LOAFERS_ERR_STREAM] = "Stream error",
+				[LOAFERS_ERR_TALLOC] = "Talloc generic error"
 			};
 			static const size_t noerrors = sizeof(errors) / sizeof(char *);
 			loafers_err_e errnum = loafers_errno(err);
