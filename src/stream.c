@@ -6,6 +6,7 @@
 #include <assert.h>
 #include <unistd.h>
 #include <errno.h>
+#include <stdio.h>
 
 #include <talloc.h>
 
@@ -24,6 +25,12 @@ loafers_rc_t loafers_stream_socket_alloc( loafers_stream_t **stream, int sockfd 
 	if( loafers_errno(rc = loafers_stream_custom_alloc(stream, sockptr, loafers_stream_write_socket, loafers_stream_read_socket, loafers_stream_close_socket)) != LOAFERS_ERR_NOERR ) return rc;
 	(void) talloc_steal(*stream, sockptr);
 	return rc;
+}
+
+loafers_rc_t loafers_stream_FILE_alloc( loafers_stream_t **stream, FILE *file ) {
+	assert(stream != NULL);
+
+	return loafers_stream_custom_alloc(stream, file, loafers_stream_write_FILE, loafers_stream_read_FILE, loafers_stream_close_FILE);
 }
 
 loafers_rc_t loafers_stream_custom_alloc( loafers_stream_t **stream, void *data, loafers_stream_writer_f writer, loafers_stream_reader_f reader, loafers_stream_closer_f closer ) {
@@ -49,8 +56,42 @@ loafers_rc_t loafers_stream_close( loafers_stream_t **stream ) {
 	return loafers_rc(LOAFERS_ERR_NOERR);
 }
 
-// TODO: Stream handlers for FILEs.
+static loafers_rc_t loafers_stream_close_FILE( void *data ) {
+	assert(data != NULL);
+
+	if( fclose((FILE *) data) == EOF ) return loafers_rc_sys();
+	return loafers_rc(LOAFERS_ERR_NOERR);
+}
+
+static loafers_rc_t loafers_stream_write_FILE( void *data, const void *buf, size_t buflen, ssize_t *remain ) {
+	assert(data != NULL);
+
+	FILE *f = (FILE *) data;
+	int fd = fileno(f);
+	flockfile(f);
+	// This can be easily optimized if necessary.
+	fflush(f);
+	loafers_rc_t rc = loafers_stream_write_socket(&fd, buf, buflen, remain);
+	funlockfile(f);
+	return rc;
+}
+
+static loafers_rc_t loafers_stream_read_FILE( void *data, void *buf, size_t buflen, ssize_t *remain ) {
+	assert(data != NULL);
+
+	FILE *f = (FILE *) data;
+	int fd = fileno(f);
+	flockfile(f);
+	// This can be easily optimized if necessary.
+	fflush(f);
+	loafers_rc_t rc = loafers_stream_read_socket(&fd, buf, buflen, remain);
+	funlockfile(f);
+	return rc;
+}
+
 static loafers_rc_t loafers_stream_close_socket( void *data ) {
+	assert(data != NULL);
+
 	if( close(*((int *) data)) == -1 ) return loafers_rc_sys();
 	return loafers_rc(LOAFERS_ERR_NOERR);
 }

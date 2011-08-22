@@ -76,7 +76,7 @@ EXPORT loafers_rc_t
 	loafers_rc( loafers_err_e err ),
 	loafers_rc_sys();
 
-EXPORT void loafers_rc_payload( loafers_rc_t rc, void *payload );
+EXPORT void loafers_set_rc_payload( loafers_rc_t rc, void *payload );
 EXPORT void *loafers_get_rc_payload( loafers_rc_t rc );
 
 EXPORT const char *loafers_strerror( loafers_rc_t err );
@@ -98,6 +98,7 @@ EXPORT loafers_rc_t
 
 EXPORT loafers_rc_t
 	loafers_stream_socket_alloc( loafers_stream_t **stream, int sockfd ),
+	loafers_stream_FILE_alloc( loafers_stream_t **stream, FILE *file ),
 	loafers_stream_custom_alloc( loafers_stream_t **stream, void *data, loafers_stream_writer_f writer, loafers_stream_reader_f reader, loafers_stream_closer_f closer ),
 	loafers_stream_close( loafers_stream_t **stream ),
 	loafers_stream_write( loafers_stream_t *stream, const void *buf, size_t buflen, ssize_t *remain ),

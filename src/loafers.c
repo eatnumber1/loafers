@@ -7,6 +7,7 @@
 #include <netinet/in.h>
 #include <unistd.h>
 #include <arpa/inet.h>
+#include <stdio.h>
 
 #include "config.h"
 
@@ -42,7 +43,7 @@ loafers_rc_t loafers_rc_sys() {
 	return ret;
 }
 
-void loafers_rc_payload( loafers_rc_t rc, void *payload ) {
+void loafers_set_rc_payload( loafers_rc_t rc, void *payload ) {
 	assert(loafers_errno(rc) == LOAFERS_ERR_UNSPEC);
 
 	rc.payload = payload;
