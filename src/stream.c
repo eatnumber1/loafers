@@ -20,6 +20,7 @@ loafers_rc_t loafers_stream_socket_alloc( loafers_stream_t **stream, int sockfd 
 
 	int *sockptr = talloc(NULL, int);
 	if( sockptr == NULL ) return loafers_rc_sys();
+	loafers_talloc_name(sockptr, "sockptr");
 	*sockptr = sockfd;
 	loafers_rc_t rc;
 	if( loafers_errno(rc = loafers_stream_custom_alloc(stream, sockptr, loafers_stream_write_socket, loafers_stream_read_socket, loafers_stream_close_socket)) != LOAFERS_ERR_NOERR ) return rc;
@@ -38,6 +39,7 @@ loafers_rc_t loafers_stream_custom_alloc( loafers_stream_t **stream, void *data,
 
 	loafers_stream_t *s = talloc_zero(NULL, loafers_stream_t);
 	if( s == NULL ) return loafers_rc_sys();
+	loafers_talloc_name(s, "s");
 	s->write = writer;
 	s->read = reader;
 	s->close = closer;

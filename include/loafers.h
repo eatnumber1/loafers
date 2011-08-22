@@ -1,6 +1,10 @@
 #ifndef __LOAFERS_H__
 #define __LOAFERS_H__
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef enum {
 	SOCKS_CMD_UNINIT = 0x00,
 	SOCKS_CMD_CONNECT = 0x01,
@@ -107,5 +111,9 @@ EXPORT loafers_rc_t
 EXPORT loafers_rc_t loafers_handshake( loafers_conn_t *conn, loafers_stream_t *stream );
 
 #undef EXPORT
+
+#ifdef __cplusplus
+} /* end of extern "C" */
+#endif
 
 #endif

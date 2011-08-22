@@ -8,6 +8,8 @@
 #include <unistd.h>
 #include <stdio.h>
 
+#include <talloc.h>
+
 #include "config.h"
 
 #include "loafers.h"
@@ -135,13 +137,17 @@ static loafers_rc_t loafers_conn_request_sending( loafers_conn_t *conn, loafers_
 	return loafers_rc(LOAFERS_ERR_NOERR);
 }
 
+#define STR(s) #s
+
 static loafers_rc_t loafers_conn_generic_reply_header_prepare( loafers_conn_t *conn, loafers_stream_t *stream, bool *avail_flag, socks_reply_t **reply, loafers_conn_e next_state ) {
 	(void) stream;
 	loafers_rc_t rc;
 	*avail_flag = false;
 	if( loafers_errno(rc = loafers_connbuf_alloc(conn, 4 * sizeof(uint8_t))) != LOAFERS_ERR_NOERR ) return rc;
-	if( (conn->data = realloc(conn->data, sizeof(uint8_t))) == NULL ) return loafers_rc_sys();
-	if( (*reply = realloc(*reply, sizeof(socks_reply_t))) == NULL ) return loafers_rc_sys();
+	if( (conn->data = talloc_realloc(conn, conn->data, uint8_t, 1)) == NULL ) return loafers_rc_sys();
+	loafers_talloc_name(conn->data, "conn->data");
+	if( (*reply = talloc_realloc(conn, *reply, socks_reply_t, 1)) == NULL ) return loafers_rc_sys();
+	loafers_talloc_name(*reply, "*reply");
 	memset(*reply, 0, sizeof(socks_reply_t));
 	conn->state = next_state;
 	return loafers_rc(LOAFERS_ERR_NOERR);
@@ -247,7 +253,8 @@ static loafers_rc_t loafers_conn_generic_reply_prepare( loafers_conn_t *conn, lo
 	if( loafers_errno(rc = loafers_connbuf_alloc(conn, buflen + sizeof(uint16_t))) != LOAFERS_ERR_NOERR ) return rc;
 	if( reply->atyp == SOCKS_ATYP_HOSTNAME ) buflen++;
 	void *bnd_addr;
-	if( (bnd_addr = malloc(buflen)) == NULL ) return loafers_rc_sys();
+	if( (bnd_addr = talloc_size(conn, buflen)) == NULL ) return loafers_rc_sys();
+	loafers_talloc_name(bnd_addr, "bnd_addr");
 	switch( reply->atyp ) {
 		case SOCKS_ATYP_IPV6:
 			reply->bnd_addr.ip6 = (struct in6_addr *) bnd_addr;
@@ -260,7 +267,6 @@ static loafers_rc_t loafers_conn_generic_reply_prepare( loafers_conn_t *conn, lo
 			reply->bnd_addr.hostname[buflen - 1] = '\0';
 			break;
 		default:
-			free(bnd_addr);
 			assert(false);
 			errno = EINVAL;
 			return loafers_rc_sys();
