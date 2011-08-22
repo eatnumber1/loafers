@@ -257,12 +257,15 @@ static loafers_rc_t loafers_conn_generic_reply_prepare( loafers_conn_t *conn, lo
 	loafers_talloc_name(bnd_addr, "bnd_addr");
 	switch( reply->atyp ) {
 		case SOCKS_ATYP_IPV6:
+			talloc_set_type(bnd_addr, struct in6_addr);
 			reply->bnd_addr.ip6 = (struct in6_addr *) bnd_addr;
 			break;
 		case SOCKS_ATYP_IPV4:
+			talloc_set_type(bnd_addr, struct in_addr);
 			reply->bnd_addr.ip4 = (struct in_addr *) bnd_addr;
 			break;
 		case SOCKS_ATYP_HOSTNAME:
+			talloc_set_type(bnd_addr, char);
 			reply->bnd_addr.hostname = (char *) bnd_addr;
 			reply->bnd_addr.hostname[buflen - 1] = '\0';
 			break;

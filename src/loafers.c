@@ -262,14 +262,13 @@ loafers_rc_t loafers_set_hostname( loafers_conn_t *conn, const char *hostname, i
 	loafers_rc_t rc = loafers_set_atyp(conn, SOCKS_ATYP_HOSTNAME);
 	if( loafers_errno(rc) != LOAFERS_ERR_NOERR ) return rc;
 	req->dst_port = port;
-	// This could be optimized by replacing it with talloc_realloc() then memcpy.
-	if( req->dst_addr.hostname != NULL ) {
-		if( talloc_free(req->dst_addr.hostname) == -1 ) return loafers_rc(LOAFERS_ERR_TALLOC);
-	}
-	req->dst_addr.hostname = talloc_strdup(conn, hostname);
-	if( req->dst_addr.hostname == NULL ) return loafers_rc_sys();
-	loafers_talloc_name(req->dst_addr.hostname, "req->dst_addr.hostname");
-	req->addrsiz = (strlen(hostname) + 1);
+	size_t buflen = strlen(hostname) + 1;
+	char *buf = talloc_realloc(conn, req->dst_addr.hostname, char, buflen);
+	if( buf == NULL ) return loafers_rc_sys();
+	loafers_talloc_name(buf, "buf");
+	memcpy(buf, hostname, buflen);
+	req->dst_addr.hostname = buf;
+	req->addrsiz = buflen;
 	loafers_set_prepared(conn);
 	return loafers_rc(LOAFERS_ERR_NOERR);
 }
@@ -320,4 +319,8 @@ loafers_rc_t loafers_connbuf_alloc( loafers_conn_t *conn, size_t count ) {
 	conn->bufptr = buf;
 	conn->bufremain = bufsiz;
 	return loafers_rc(LOAFERS_ERR_NOERR);
+}
+
+void _loafers_talloc_name( void *ctx, const char *file, unsigned int line, const char *str ) {
+	(void) talloc_set_name(ctx, "%s:%u:%s", file, line, str);
 }
