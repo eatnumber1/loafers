@@ -40,7 +40,7 @@ static loafers_rc_t loafers_conn_write( loafers_stream_t *stream, loafers_conn_t
 	ssize_t remain;
 	loafers_rc_t rc = loafers_raw_write(stream, conn->bufptr, conn->bufremain, &remain);
 	conn->bufptr += conn->bufremain - remain;
-	conn->bufremain -= remain;
+	conn->bufremain = remain;
 	return rc;
 }
 
@@ -48,7 +48,7 @@ static loafers_rc_t loafers_conn_read( loafers_stream_t *stream, loafers_conn_t 
 	ssize_t remain;
 	loafers_rc_t rc = loafers_raw_read(stream, conn->bufptr, conn->bufremain, &remain);
 	conn->bufptr += conn->bufremain - remain;
-	conn->bufremain -= remain;
+	conn->bufremain = remain;
 	return rc;
 }
 

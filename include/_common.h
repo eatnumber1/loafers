@@ -87,9 +87,9 @@ struct _loafers_conn_t {
 
 struct _loafers_stream_t {
 	void *data;
-	void *error;
 	loafers_stream_writer_f write;
 	loafers_stream_reader_f read;
+	loafers_stream_closer_f close;
 };
 
 loafers_rc_t loafers_rc_socks( loafers_err_e err, loafers_err_socks_e socks_err );

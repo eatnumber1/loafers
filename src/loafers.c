@@ -20,6 +20,8 @@ loafers_err_e loafers_errno( loafers_rc_t err ) {
 }
 
 loafers_err_socks_e loafers_socks_errno( loafers_rc_t err ) {
+	assert(loafers_errno(err) == LOAFERS_ERR_SOCKS);
+
 	return err.socks_errno;
 }
 
@@ -38,6 +40,18 @@ loafers_rc_t loafers_rc_sys() {
 	loafers_rc_t ret = loafers_rc(LOAFERS_ERR_ERRNO);
 	ret.sys_errno = errno;
 	return ret;
+}
+
+void loafers_rc_payload( loafers_rc_t rc, void *payload ) {
+	assert(loafers_errno(rc) == LOAFERS_ERR_UNSPEC);
+
+	rc.payload = payload;
+}
+
+void *loafers_get_rc_payload( loafers_rc_t rc ) {
+	assert(loafers_errno(rc) == LOAFERS_ERR_UNSPEC);
+
+	return rc.payload;
 }
 
 static loafers_rc_t loafers_get_generic_addr( loafers_conn_t *conn, char **addr, socks_reply_t *reply, bool *avail_flag ) {
@@ -162,7 +176,7 @@ const char *loafers_strerror( loafers_rc_t err ) {
 				[LOAFERS_ERR_SOCKS] = "Protocol error",
 				[LOAFERS_ERR_BADSTATE] = "Invalid state machine",
 				[LOAFERS_ERR_NOTAVAIL] = "Information not available",
-				[LOAFERS_ERR_STREAM] = "Stream error",
+				[LOAFERS_ERR_UNSPEC] = "Unspecified error",
 				[LOAFERS_ERR_TALLOC] = "Talloc generic error"
 			};
 			static const size_t noerrors = sizeof(errors) / sizeof(char *);
@@ -336,16 +350,4 @@ loafers_rc_t loafers_connbuf_alloc( loafers_conn_t *conn, size_t count ) {
 	conn->bufptr = buf;
 	conn->bufremain = bufsiz;
 	return loafers_rc(LOAFERS_ERR_NOERR);
-}
-
-loafers_rc_t loafers_stream_write( loafers_stream_t *stream, const void *buf, size_t buflen, ssize_t *remain ) {
-	assert(stream != NULL && remain != NULL);
-
-	return loafers_raw_write(stream, buf, buflen, remain);
-}
-
-loafers_rc_t loafers_stream_read( loafers_stream_t *stream, void *buf, size_t buflen, ssize_t *remain ) {
-	assert(stream != NULL && remain != NULL);
-
-	return loafers_raw_read(stream, buf, buflen, remain);
 }
