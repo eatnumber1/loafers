@@ -321,6 +321,6 @@ loafers_rc_t loafers_connbuf_alloc( loafers_conn_t *conn, size_t count ) {
 	return loafers_rc(LOAFERS_ERR_NOERR);
 }
 
-void _loafers_talloc_name( void *ctx, const char *file, unsigned int line, const char *str ) {
-	(void) talloc_set_name(ctx, "%s:%u:%s", file, line, str);
+void _loafers_talloc_name( void *ctx, const char *str ) {
+	(void) talloc_set_name_const(ctx, str);
 }

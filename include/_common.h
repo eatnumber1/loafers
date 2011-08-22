@@ -100,7 +100,9 @@ loafers_rc_t loafers_connbuf_alloc( loafers_conn_t *conn, size_t count );
 loafers_rc_t loafers_raw_read( loafers_stream_t *stream, void *buf, size_t buflen, ssize_t *remain );
 loafers_rc_t loafers_raw_write( loafers_stream_t *stream, const void *buf, size_t buflen, ssize_t *remain );
 
-void _loafers_talloc_name( void *ctx, const char *file, unsigned int line, const char *str );
-#define loafers_talloc_name(ctx, str) _loafers_talloc_name(ctx, __FILE__, __LINE__, str)
+void _loafers_talloc_name( void *ctx, const char *str );
+#define STRINGIFY(x) #x
+#define TOSTRING(x) STRINGIFY(x)
+#define loafers_talloc_name(ctx, str) _loafers_talloc_name(ctx, __FILE__ ":" TOSTRING(__LINE__) ":" str)
 
 #endif
