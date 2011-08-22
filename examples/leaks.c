@@ -62,10 +62,10 @@ int main( int argc, char *argv[] ) {
 	if( loafers_errno(rc = loafers_set_hostname(conn, argv[3], htons(atoi(argv[4])))) != LOAFERS_ERR_NOERR ) loafers_die(rc, "loafers_set_hostname");
 	if( loafers_errno(rc = loafers_stream_socket_alloc(&stream, sock)) != LOAFERS_ERR_NOERR ) loafers_die(rc, "loafers_stream_socket_alloc");
 	if( loafers_errno(rc = loafers_handshake(conn, stream)) != LOAFERS_ERR_NOERR ) loafers_die(rc, "loafers_handshake");
-	//if( loafers_errno(rc = loafers_conn_free(&conn)) != LOAFERS_ERR_NOERR ) loafers_die(rc, "loafers_conn_free");
+	if( loafers_errno(rc = loafers_conn_free(&conn)) != LOAFERS_ERR_NOERR ) loafers_die(rc, "loafers_conn_free");
 
 	const char *hello = "Hello World!\n";
 	if( loafers_errno(rc = loafers_stream_write(stream, hello, strlen(hello) + 1, NULL)) != LOAFERS_ERR_NOERR ) loafers_die(rc, "loafers_stream_write");
-	//if( loafers_errno(rc = loafers_stream_close(&stream)) != LOAFERS_ERR_NOERR ) loafers_die(rc, "loafers_stream_free");
+	if( loafers_errno(rc = loafers_stream_close(&stream)) != LOAFERS_ERR_NOERR ) loafers_die(rc, "loafers_stream_free");
 	return EXIT_SUCCESS;
 }

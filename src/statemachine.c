@@ -254,7 +254,6 @@ static loafers_rc_t loafers_conn_generic_reply_prepare( loafers_conn_t *conn, lo
 	if( reply->atyp == SOCKS_ATYP_HOSTNAME ) buflen++;
 	void *bnd_addr;
 	if( (bnd_addr = talloc_size(conn, buflen)) == NULL ) return loafers_rc_sys();
-	loafers_talloc_name(bnd_addr, "bnd_addr");
 	switch( reply->atyp ) {
 		case SOCKS_ATYP_IPV6:
 			talloc_set_type(bnd_addr, struct in6_addr);
@@ -274,6 +273,7 @@ static loafers_rc_t loafers_conn_generic_reply_prepare( loafers_conn_t *conn, lo
 			errno = EINVAL;
 			return loafers_rc_sys();
 	}
+	loafers_talloc_name(bnd_addr, "bnd_addr");
 	conn->state = next_state;
 	return loafers_rc(LOAFERS_ERR_NOERR);
 }
