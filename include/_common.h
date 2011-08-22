@@ -83,7 +83,7 @@ struct _loafers_conn_t {
 	bool bindwait;
 	// For passing information between states.
 	void *data;
-	// A possible optimization here would be to leverage talloc_pools
+	// OPTIMIZE: Leverage talloc_pools
 };
 
 struct _loafers_stream_t {
@@ -103,6 +103,6 @@ loafers_rc_t loafers_raw_write( loafers_stream_t *stream, const void *buf, size_
 void _loafers_talloc_name( void *ctx, const char *str );
 #define STRINGIFY(x) #x
 #define TOSTRING(x) STRINGIFY(x)
-#define loafers_talloc_name(ctx, str) _loafers_talloc_name(ctx, __FILE__ ":" TOSTRING(__LINE__) ":" str)
+#define loafers_talloc_name(ctx) _loafers_talloc_name(ctx, __FILE__ ":" TOSTRING(__LINE__))
 
 #endif

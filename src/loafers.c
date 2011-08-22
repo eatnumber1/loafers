@@ -190,13 +190,15 @@ const char *loafers_strerror( loafers_rc_t err ) {
 	}
 }
 
-loafers_rc_t loafers_conn_alloc( loafers_conn_t **conn ) {
-	assert(conn != NULL);
+loafers_rc_t loafers_conn_alloc( loafers_conn_t **c ) {
+	assert(c != NULL);
 
-	*conn = talloc_zero(NULL, loafers_conn_t);
-	if( *conn == NULL ) return loafers_rc_sys();
-	loafers_talloc_name(*conn, "*conn");
-	(*conn)->state = LOAFERS_CONN_UNPREPARED;
+	loafers_conn_t *conn = *c;
+	conn = talloc_ptrtype(NULL, conn);
+	if( conn == NULL ) return loafers_rc_sys();
+	memset(conn, 0, sizeof(*conn));
+	conn->state = LOAFERS_CONN_UNPREPARED;
+	*c = conn;
 	return loafers_rc(LOAFERS_ERR_NOERR);
 }
 
@@ -229,11 +231,11 @@ loafers_rc_t loafers_set_version( loafers_conn_t *conn, socks_version_e version 
 loafers_rc_t loafers_set_methods( loafers_conn_t *conn, uint8_t nmethods, const socks_method_e methods[static nmethods] ) {
 	assert(conn != NULL && methods != NULL);
 
-	if( conn->ver.methods != NULL ) free(conn->ver.methods);
-	conn->ver.methods = talloc_array(conn, socks_method_e, nmethods);
-	if( conn->ver.methods == NULL ) return loafers_rc_sys();
-	loafers_talloc_name(conn->ver.methods, "conn->ver.methods");
-	memcpy(conn->ver.methods, methods, nmethods * sizeof(socks_method_e));
+	socks_method_e *methodptr = talloc_realloc(conn, conn->ver.methods, socks_method_e, nmethods);
+	if( methodptr == NULL ) return loafers_rc_sys();
+	loafers_talloc_name(methodptr);
+	memcpy(methodptr, methods, nmethods * sizeof(socks_method_e));
+	conn->ver.methods = methodptr;
 	conn->ver.nmethods = nmethods;
 	loafers_set_prepared(conn);
 	return loafers_rc(LOAFERS_ERR_NOERR);
@@ -265,7 +267,7 @@ loafers_rc_t loafers_set_hostname( loafers_conn_t *conn, const char *hostname, i
 	size_t buflen = strlen(hostname) + 1;
 	char *buf = talloc_realloc(conn, req->dst_addr.hostname, char, buflen);
 	if( buf == NULL ) return loafers_rc_sys();
-	loafers_talloc_name(buf, "buf");
+	loafers_talloc_name(buf);
 	memcpy(buf, hostname, buflen);
 	req->dst_addr.hostname = buf;
 	req->addrsiz = buflen;
@@ -283,23 +285,25 @@ loafers_rc_t loafers_set_sockaddr( loafers_conn_t *conn, const struct sockaddr *
 			if( loafers_errno(rc = loafers_set_atyp(conn, SOCKS_ATYP_IPV4)) != LOAFERS_ERR_NOERR ) return rc;
 			struct sockaddr_in *addr = (struct sockaddr_in *) address;
 			req->dst_port = addr->sin_port;
-			if( req->dst_addr.ip4 != NULL ) free(req->dst_addr.ip4);
 			req->addrsiz = sizeof(struct in_addr);
-			req->dst_addr.ip4 = talloc(conn, struct in_addr);
-			if( req->dst_addr.ip4 == NULL ) return loafers_rc_sys();
-			loafers_talloc_name(req->dst_addr.ip4, "req->dst_addr.ip4");
-			memcpy(req->dst_addr.ip4, &addr->sin_addr, sizeof(struct in_addr));
+			struct in_addr *v4addr = req->dst_addr.ip4;
+			if( (v4addr = talloc_realloc(conn, v4addr, struct in_addr, 1)) == NULL ) return loafers_rc_sys();
+			if( v4addr == NULL ) return loafers_rc_sys();
+			loafers_talloc_name(v4addr);
+			memcpy(v4addr, &addr->sin_addr, sizeof(struct in_addr));
+			req->dst_addr.ip4 = v4addr;
 			break;
 		case AF_INET6:
 			if( loafers_errno(rc = loafers_set_atyp(conn, SOCKS_ATYP_IPV6)) != LOAFERS_ERR_NOERR ) return rc;
 			struct sockaddr_in6 *addr6 = (struct sockaddr_in6 *) address;
 			req->dst_port = addr6->sin6_port;
-			if( req->dst_addr.ip6 != NULL ) free(req->dst_addr.ip6);
 			req->addrsiz = sizeof(struct in6_addr);
-			req->dst_addr.ip6 = talloc(conn, struct in6_addr);
-			if( req->dst_addr.ip6 == NULL ) return loafers_rc_sys();
-			loafers_talloc_name(req->dst_addr.ip6, "req->dst_addr.ip6");
-			memcpy(req->dst_addr.ip6, &addr6->sin6_addr, sizeof(struct in6_addr));
+			struct in6_addr *v6addr = req->dst_addr.ip6;
+			if( (v6addr = talloc_realloc(conn, v6addr, struct in6_addr, 1)) == NULL ) return loafers_rc_sys();
+			if( v6addr == NULL ) return loafers_rc_sys();
+			loafers_talloc_name(v6addr);
+			memcpy(v6addr, &addr6->sin6_addr, sizeof(struct in6_addr));
+			req->dst_addr.ip6 = v6addr;
 			break;
 		default:
 			assert(false);
@@ -314,7 +318,7 @@ loafers_rc_t loafers_connbuf_alloc( loafers_conn_t *conn, size_t count ) {
 	size_t bufsiz = count * sizeof(uint8_t);
 	uint8_t *buf = talloc_realloc(conn, conn->buf, uint8_t, bufsiz);
 	if( buf == NULL ) return loafers_rc_sys();
-	loafers_talloc_name(buf, "buf");
+	loafers_talloc_name(buf);
 	conn->buf = buf;
 	conn->bufptr = buf;
 	conn->bufremain = bufsiz;

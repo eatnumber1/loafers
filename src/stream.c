@@ -18,9 +18,8 @@
 loafers_rc_t loafers_stream_socket_alloc( loafers_stream_t **stream, int sockfd ) {
 	assert(stream != NULL);
 
-	int *sockptr = talloc(NULL, int);
+	int *sockptr = talloc_ptrtype(NULL, sockptr);
 	if( sockptr == NULL ) return loafers_rc_sys();
-	loafers_talloc_name(sockptr, "sockptr");
 	*sockptr = sockfd;
 	loafers_rc_t rc;
 	if( loafers_errno(rc = loafers_stream_custom_alloc(stream, sockptr, loafers_stream_write_socket, loafers_stream_read_socket, loafers_stream_close_socket)) != LOAFERS_ERR_NOERR ) return rc;
@@ -37,9 +36,9 @@ loafers_rc_t loafers_stream_FILE_alloc( loafers_stream_t **stream, FILE *file ) 
 loafers_rc_t loafers_stream_custom_alloc( loafers_stream_t **stream, void *data, loafers_stream_writer_f writer, loafers_stream_reader_f reader, loafers_stream_closer_f closer ) {
 	assert(stream != NULL);
 
-	loafers_stream_t *s = talloc_zero(NULL, loafers_stream_t);
+	loafers_stream_t *s = talloc_ptrtype(NULL, s);
 	if( s == NULL ) return loafers_rc_sys();
-	loafers_talloc_name(s, "s");
+	memset(s, 0, sizeof(*s));
 	s->write = writer;
 	s->read = reader;
 	s->close = closer;
@@ -71,7 +70,7 @@ static loafers_rc_t loafers_stream_write_FILE( void *data, const void *buf, size
 	FILE *f = (FILE *) data;
 	int fd = fileno(f);
 	flockfile(f);
-	// This can be easily optimized if necessary.
+	// OPTIMIZE: Don't delegate to loafers_stream_write_socket and the fflush can go.
 	fflush(f);
 	loafers_rc_t rc = loafers_stream_write_socket(&fd, buf, buflen, remain);
 	funlockfile(f);

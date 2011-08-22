@@ -137,19 +137,21 @@ static loafers_rc_t loafers_conn_request_sending( loafers_conn_t *conn, loafers_
 	return loafers_rc(LOAFERS_ERR_NOERR);
 }
 
-#define STR(s) #s
-
-static loafers_rc_t loafers_conn_generic_reply_header_prepare( loafers_conn_t *conn, loafers_stream_t *stream, bool *avail_flag, socks_reply_t **reply, loafers_conn_e next_state ) {
+static loafers_rc_t loafers_conn_generic_reply_header_prepare( loafers_conn_t *conn, loafers_stream_t *stream, bool *avail_flag, socks_reply_t **r, loafers_conn_e next_state ) {
 	(void) stream;
 	loafers_rc_t rc;
 	*avail_flag = false;
+	socks_reply_t *reply = *r;
+	void *data = conn->data;
 	if( loafers_errno(rc = loafers_connbuf_alloc(conn, 4 * sizeof(uint8_t))) != LOAFERS_ERR_NOERR ) return rc;
-	if( (conn->data = talloc_realloc(conn, conn->data, uint8_t, 1)) == NULL ) return loafers_rc_sys();
-	loafers_talloc_name(conn->data, "conn->data");
-	if( (*reply = talloc_realloc(conn, *reply, socks_reply_t, 1)) == NULL ) return loafers_rc_sys();
-	loafers_talloc_name(*reply, "*reply");
-	memset(*reply, 0, sizeof(socks_reply_t));
+	if( (data = talloc_realloc(conn, data, uint8_t, 1)) == NULL ) return loafers_rc_sys();
+	loafers_talloc_name(data);
+	if( (reply = talloc_realloc(conn, reply, socks_reply_t, 1)) == NULL ) return loafers_rc_sys();
+	loafers_talloc_name(reply);
+	memset(reply, 0, sizeof(socks_reply_t));
 	conn->state = next_state;
+	conn->data = data;
+	*r = reply;
 	return loafers_rc(LOAFERS_ERR_NOERR);
 }
 
@@ -273,7 +275,7 @@ static loafers_rc_t loafers_conn_generic_reply_prepare( loafers_conn_t *conn, lo
 			errno = EINVAL;
 			return loafers_rc_sys();
 	}
-	loafers_talloc_name(bnd_addr, "bnd_addr");
+	loafers_talloc_name(bnd_addr);
 	conn->state = next_state;
 	return loafers_rc(LOAFERS_ERR_NOERR);
 }
