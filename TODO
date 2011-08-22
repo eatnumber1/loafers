@@ -3,5 +3,7 @@ Wishlist
 	SOCKS4
 	SOCKS5
 		CMD_UDP
+			Fragmentation
 		METHOD_GSSAPI
 		METHOD_USERPASS
+	Check for everything that's used by loafers during configure
