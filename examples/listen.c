@@ -207,7 +207,7 @@ int main( int argc, char *argv[] ) {
 
 	if( loafers_errno(rc = loafers_conn_free(&conn)) != LOAFERS_ERR_NOERR ) loafers_die(rc, "loafers_conn_free");
 
-	static const size_t bufsiz = 4096;
+	static const ssize_t bufsiz = 4096;
 	ssize_t remain;
 	char buf[bufsiz + 1];
 	loafers_err_e code;
