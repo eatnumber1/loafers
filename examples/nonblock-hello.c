@@ -120,6 +120,6 @@ int main( int argc, char *argv[] ) {
 				loafers_die(rc, "loafers_write");
 		}
 	} while( code != LOAFERS_ERR_NOERR );
-	if( loafers_errno(rc = loafers_stream_close(&stream)) != LOAFERS_ERR_NOERR ) loafers_die(rc, "loafers_stream_free");
+	if( loafers_errno(rc = loafers_stream_close(&stream)) != LOAFERS_ERR_NOERR ) loafers_die(rc, "loafers_stream_close");
 	return EXIT_SUCCESS;
 }

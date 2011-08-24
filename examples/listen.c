@@ -78,7 +78,7 @@ static loafers_stream_t *make_stream( int sock ) {
 
 static void close_stream( loafers_stream_t *stream ) {
 	loafers_rc_t rc;
-	if( loafers_errno(rc = loafers_stream_close(&stream)) != LOAFERS_ERR_NOERR ) loafers_die(rc, "loafers_stream_free");
+	if( loafers_errno(rc = loafers_stream_close(&stream)) != LOAFERS_ERR_NOERR ) loafers_die(rc, "loafers_stream_close");
 }
 
 static loafers_stream_t *listen_connect( char *argv[] ) {

@@ -7,6 +7,10 @@
 #include <netinet/in.h>
 #include <unistd.h>
 #include <stdio.h>
+#include <inttypes.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netdb.h>
 
 #include <talloc.h>
 
@@ -349,6 +353,92 @@ loafers_rc_t loafers_handshake( loafers_conn_t *conn, loafers_stream_t *stream )
 		if( conn->state >= loafers_nostates ) return loafers_rc(LOAFERS_ERR_BADSTATE);
 		loafers_rc_t rc = loafers_state_handlers[conn->state](conn, stream);
 		if( loafers_errno(rc) != LOAFERS_ERR_NOERR ) return rc;
+	}
+	return loafers_rc(LOAFERS_ERR_NOERR);
+}
+
+loafers_rc_t loafers_udpassociate( loafers_conn_t *conn, loafers_stream_t *stream, loafers_resolver_f r, loafers_stream_t **udpstream ) {
+	assert(conn != NULL && stream != NULL && udpstream != NULL);
+
+	if( conn->req.cmd != SOCKS_CMD_UDP_ASSOCIATE ) {
+		errno = EINVAL;
+		return loafers_rc_sys();
+	}
+	loafers_rc_t rc;
+	loafers_resolver_f resolver = r == NULL ? loafers_getaddrinfo_resolver : r;
+	while( conn->udp.state != LOAFERS_UDP_ASSOCIATED ) {
+		switch( conn->udp.state ) {
+			case LOAFERS_UDP_HANDSHAKE:
+				if( loafers_errno(rc = loafers_handshake(conn, stream)) != LOAFERS_ERR_NOERR ) return rc;
+				conn->udp.state = LOAFERS_UDP_ADDRESS;
+			case LOAFERS_UDP_ADDRESS: {
+				void *ctx = talloc_new(conn);
+				if( ctx == NULL ) return loafers_rc_sys();
+				char *hostname;
+				if( loafers_errno(rc = loafers_get_relay_addr(conn, &hostname)) != LOAFERS_ERR_NOERR ) {
+					(void) talloc_free(ctx);
+					return rc;
+				}
+				char *h = talloc_strdup(ctx, hostname);
+				free(hostname);
+				if( h == NULL ) {
+					(void) talloc_free(ctx);
+					return loafers_rc_sys();
+				}
+				hostname = h;
+				in_port_t port;
+				if( loafers_errno(rc = loafers_get_relay_port(conn, &port)) != LOAFERS_ERR_NOERR ) {
+					(void) talloc_free(ctx);
+					return rc;
+				}
+				char *servname = talloc_asprintf(ctx, "%" PRIu16, port);
+				if( servname == NULL ) {
+					(void) talloc_free(ctx);
+					return loafers_rc_sys();
+				}
+				struct addrinfo **addr = talloc_ptrtype(ctx, addr);
+				if( addr == NULL ) {
+					(void) talloc_free(ctx);
+					return loafers_rc_sys();
+				}
+				conn->udp.hostname = hostname;
+				conn->udp.servname = servname;
+				conn->udp.address = addr;
+				conn->udp.state = LOAFERS_UDP_RESOLVE;
+			}
+			case LOAFERS_UDP_RESOLVE:
+				if( loafers_errno(rc = resolver(conn->udp.hostname, conn->udp.servname, conn->udp.address)) != LOAFERS_ERR_NOERR ) return rc;
+				talloc_set_destructor(conn->udp.address, loafers_resolve_addrinfo_free);
+				conn->udp.state = LOAFERS_UDP_CONNECT;
+			case LOAFERS_UDP_CONNECT: {
+				int sock;
+				for( struct addrinfo *res = *conn->udp.address; res != NULL; res = res->ai_next ) {
+					sock = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
+					if( sock == -1 ) {
+						rc = loafers_rc_sys();
+						continue;
+					}
+					if( connect(sock, res->ai_addr, res->ai_addrlen) != 0 ) {
+						close(sock);
+						rc = loafers_rc_sys();
+						continue;
+					}
+					rc = loafers_rc(LOAFERS_ERR_NOERR);
+					break;
+				}
+				if( loafers_errno(rc) != LOAFERS_ERR_NOERR ) return rc;
+				if( loafers_errno(rc = loafers_stream_socket_alloc(udpstream, sock)) != LOAFERS_ERR_NOERR ) {
+					close(sock);
+					return loafers_rc_sys();
+				}
+				conn->udp.state = LOAFERS_UDP_ASSOCIATED;
+				break;
+			}
+			default:
+				assert(false);
+				errno = EINVAL;
+				return loafers_rc_sys();
+		}
 	}
 	return loafers_rc(LOAFERS_ERR_NOERR);
 }

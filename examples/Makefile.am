@@ -1,8 +1,12 @@
-bin_PROGRAMS = hello nonblock-hello listen
+bin_PROGRAMS = hello nonblock-hello listen udphello
 
 hello_SOURCES = hello.c
 hello_CFLAGS = -I$(top_srcdir)/include $(TALLOC_CFLAGS)
 hello_LDADD = $(top_builddir)/libloafers.la $(TALLOC_LIBS)
+
+udphello_SOURCES = udphello.c
+udphello_CFLAGS = -I$(top_srcdir)/include $(TALLOC_CFLAGS)
+udphello_LDADD = $(top_builddir)/libloafers.la $(TALLOC_LIBS)
 
 nonblock_hello_SOURCES = nonblock-hello.c
 nonblock_hello_CFLAGS = -I$(top_srcdir)/include $(TALLOC_CFLAGS)

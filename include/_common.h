@@ -16,8 +16,8 @@ typedef struct {
 
 typedef struct {
 	socks_version_e ver;
-	uint8_t nmethods;
 	socks_method_e *methods;
+	uint8_t nmethods;
 } socks_version_t;
 
 typedef struct {
@@ -29,8 +29,8 @@ typedef struct {
 	socks_version_e ver;
 	socks_cmd_e cmd;
 	socks_atyp_e atyp;
-	in_port_t dst_port;
 	socks_addr_u dst_addr;
+	in_port_t dst_port;
 	size_t addrsiz;
 } socks_request_t;
 
@@ -38,8 +38,8 @@ typedef struct {
 	socks_version_e ver;
 	loafers_err_socks_e rep;
 	socks_atyp_e atyp;
-	in_port_t bnd_port;
 	socks_addr_u bnd_addr;
+	in_port_t bnd_port;
 } socks_reply_t;
 
 typedef struct {
@@ -83,22 +83,35 @@ struct _loafers_conn_t {
 	socks_request_t req;
 	socks_reply_t *reply;
 	socks_reply_t *bnd_reply;
-	size_t addrsiz;
 	// Connection state information
 	loafers_conn_e state;
-	uint8_t *buf, *bufptr;
-	size_t bufremain;
-	bool reply_avail, bnd_reply_avail;
-	bool bindwait, flushing;
+	struct {
+		struct addrinfo **address;
+		char *hostname, *servname;
+		enum {
+			LOAFERS_UDP_HANDSHAKE = 0,
+			LOAFERS_UDP_ADDRESS,
+			LOAFERS_UDP_RESOLVE,
+			LOAFERS_UDP_CONNECT,
+			LOAFERS_UDP_ASSOCIATED
+		} state;
+	} udp;
 	// For passing information between states.
 	void *data;
+	uint8_t *buf, *bufptr;
+	size_t bufremain;
+	size_t addrsiz;
+	bool reply_avail, bnd_reply_avail;
+	bool bindwait, flushing;
 };
 
 struct _loafers_stream_t {
-	void *data, *wpacket, *wpacketptr;
-	size_t wpacketlen;
-	bool udp;
+	struct _loafers_stream_t *udpcontrol;
 	socks_udp_request_t udp_req;
+	void *data, *wpacket, *wpacketptr;
+	loafers_stream_writer_f write;
+	loafers_stream_reader_f read;
+	loafers_stream_closer_f close;
 	struct {
 		enum {
 			LOAFERS_WRITE_PURGING = 0,
@@ -115,10 +128,8 @@ struct _loafers_stream_t {
 			LOAFERS_CLOSE_DONE
 		} close;
 	} state;
-
-	loafers_stream_writer_f write;
-	loafers_stream_reader_f read;
-	loafers_stream_closer_f close;
+	bool udp;
+	size_t wpacketlen;
 };
 
 loafers_rc_t loafers_rc_socks( loafers_err_e err, loafers_err_socks_e socks_err );
@@ -129,6 +140,12 @@ loafers_rc_t loafers_stream_read( loafers_stream_t *stream, void *buf, size_t bu
 loafers_rc_t loafers_stream_write( loafers_stream_t *stream, const void *buf, size_t buflen );
 loafers_rc_t loafers_stream_flush( loafers_stream_t *stream );
 loafers_rc_t loafers_stream_purge( loafers_stream_t *stream );
+
+loafers_rc_t loafers_getaddrinfo_resolver( const char *hostname, const char *servname, struct addrinfo **res );
+int loafers_resolve_addrinfo_free( struct addrinfo **addr );
+
+loafers_rc_t loafers_get_relay_addr( loafers_conn_t *conn, char **addr );
+loafers_rc_t loafers_get_relay_port( loafers_conn_t *conn, in_port_t *port );
 
 #define STRINGIFY(x) #x
 #define TOSTRING(x) STRINGIFY(x)

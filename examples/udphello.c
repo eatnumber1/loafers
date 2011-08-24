@@ -52,20 +52,21 @@ int main( int argc, char *argv[] ) {
 	freeaddrinfo(res);
 
 	loafers_conn_t *conn;
-	loafers_stream_t *stream;
+	loafers_stream_t *stream, *udpstream;
 	loafers_rc_t rc;
 	if( loafers_errno(rc = loafers_conn_alloc(&conn)) != LOAFERS_ERR_NOERR ) loafers_die(rc, "loafers_alloc");
 	if( loafers_errno(rc = loafers_set_version(conn, SOCKS_VERSION_5)) != LOAFERS_ERR_NOERR ) loafers_die(rc, "loafers_set_version");
 	socks_method_e methods[] = { SOCKS_METHOD_NONE };
 	if( loafers_errno(rc = loafers_set_methods(conn, 1, methods)) != LOAFERS_ERR_NOERR ) loafers_die(rc, "loafers_set_methods");
-	if( loafers_errno(rc = loafers_set_command(conn, SOCKS_CMD_CONNECT)) != LOAFERS_ERR_NOERR ) loafers_die(rc, "loafers_set_command");
+	if( loafers_errno(rc = loafers_set_command(conn, SOCKS_CMD_UDP_ASSOCIATE)) != LOAFERS_ERR_NOERR ) loafers_die(rc, "loafers_set_command");
 	if( loafers_errno(rc = loafers_set_hostname(conn, argv[3], htons(atoi(argv[4])))) != LOAFERS_ERR_NOERR ) loafers_die(rc, "loafers_set_hostname");
 	if( loafers_errno(rc = loafers_stream_socket_alloc(&stream, sock)) != LOAFERS_ERR_NOERR ) loafers_die(rc, "loafers_stream_socket_alloc");
-	if( loafers_errno(rc = loafers_handshake(conn, stream)) != LOAFERS_ERR_NOERR ) loafers_die(rc, "loafers_handshake");
+	if( loafers_errno(rc = loafers_udpassociate(conn, stream, NULL, &udpstream)) != LOAFERS_ERR_NOERR ) loafers_die(rc, "loafers_udpassociate");
 	if( loafers_errno(rc = loafers_conn_free(&conn)) != LOAFERS_ERR_NOERR ) loafers_die(rc, "loafers_conn_free");
 
 	const char *hello = "Hello World!\n";
-	if( loafers_errno(rc = loafers_write(stream, hello, strlen(hello) + 1)) != LOAFERS_ERR_NOERR ) loafers_die(rc, "loafers_write");
+	//if( loafers_errno(rc = loafers_write(udpstream, hello, strlen(hello) + 1)) != LOAFERS_ERR_NOERR ) loafers_die(rc, "loafers_write");
+	if( loafers_errno(rc = loafers_stream_close(&udpstream)) != LOAFERS_ERR_NOERR ) loafers_die(rc, "loafers_stream_close");
 	if( loafers_errno(rc = loafers_stream_close(&stream)) != LOAFERS_ERR_NOERR ) loafers_die(rc, "loafers_stream_close");
 	return EXIT_SUCCESS;
 }

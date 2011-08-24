@@ -8,6 +8,9 @@
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <stdio.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netdb.h>
 
 #include <talloc.h>
 
@@ -96,6 +99,12 @@ static loafers_rc_t loafers_get_generic_addr( loafers_conn_t *conn, char **addr,
 	return loafers_rc(LOAFERS_ERR_NOERR);
 }
 
+loafers_rc_t loafers_get_relay_addr( loafers_conn_t *conn, char **addr ) {
+	// The remote address is only available when using UDP_ASSOCIATE
+	if( conn->req.cmd != SOCKS_CMD_UDP_ASSOCIATE ) return loafers_rc(LOAFERS_ERR_NOTAVAIL);
+	return loafers_get_generic_addr(conn, addr, conn->reply, &conn->reply_avail);
+}
+
 loafers_rc_t loafers_get_remote_addr( loafers_conn_t *conn, char **addr ) {
 	// The remote address is only available when using BIND
 	if( conn->req.cmd != SOCKS_CMD_BIND ) return loafers_rc(LOAFERS_ERR_NOTAVAIL);
@@ -119,6 +128,12 @@ static loafers_rc_t loafers_get_generic_port( loafers_conn_t *conn, in_port_t *p
 	if( !*avail_flag ) return loafers_rc(LOAFERS_ERR_NOTAVAIL);
 	*port = reply->bnd_port;
 	return loafers_rc(LOAFERS_ERR_NOERR);
+}
+
+loafers_rc_t loafers_get_relay_port( loafers_conn_t *conn, in_port_t *port ) {
+	// The remote port is only available when using UDP_ASSOCIATE
+	if( conn->req.cmd != SOCKS_CMD_UDP_ASSOCIATE ) return loafers_rc(LOAFERS_ERR_NOTAVAIL);
+	return loafers_get_generic_port(conn, port, conn->reply, &conn->reply_avail);
 }
 
 loafers_rc_t loafers_get_remote_port( loafers_conn_t *conn, in_port_t *port ) {
@@ -168,6 +183,8 @@ const char *loafers_strerror( loafers_rc_t err ) {
 			return strerror(err.sys_errno);
 		case LOAFERS_ERR_SOCKS:
 			return socks_strerror(err.socks_errno);
+		case LOAFERS_ERR_GETADDRINFO:
+			return gai_strerror(err.getaddrinfo_errno);
 		default: {
 			static const char * const errors[] = {
 				[LOAFERS_ERR_NOERR] = "No error",
@@ -323,4 +340,26 @@ loafers_rc_t loafers_connbuf_alloc( loafers_conn_t *conn, size_t count ) {
 	conn->bufptr = buf;
 	conn->bufremain = bufsiz;
 	return loafers_rc(LOAFERS_ERR_NOERR);
+}
+
+loafers_rc_t loafers_getaddrinfo_resolver( const char *hostname, const char *servname, struct addrinfo **res ) {
+	struct addrinfo hints;
+	memset(&hints, 0, sizeof(struct addrinfo));
+	hints.ai_family = AF_UNSPEC;
+	hints.ai_socktype = SOCK_DGRAM;
+	hints.ai_protocol = IPPROTO_UDP;
+	int retcode;
+	if( (retcode = getaddrinfo(hostname, servname, &hints, res)) != 0 ) {
+		loafers_rc_t ret = loafers_rc(LOAFERS_ERR_GETADDRINFO);
+		ret.getaddrinfo_errno = retcode;
+		return ret;
+	}
+	return loafers_rc(LOAFERS_ERR_NOERR);
+}
+
+int loafers_resolve_addrinfo_free( struct addrinfo **addr ) {
+	assert(addr != NULL);
+
+	freeaddrinfo(*addr);
+	return 0;
 }

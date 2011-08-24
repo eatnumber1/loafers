@@ -36,7 +36,8 @@ typedef enum {
 	LOAFERS_ERR_NOTAVAIL,
 	LOAFERS_ERR_UNSPEC,
 	LOAFERS_ERR_TALLOC,
-	LOAFERS_ERR_NOT_SUPPORTED
+	LOAFERS_ERR_NOT_SUPPORTED,
+	LOAFERS_ERR_GETADDRINFO
 } loafers_err_e;
 
 typedef enum {
@@ -59,12 +60,15 @@ typedef struct {
 		int sys_errno;
 		loafers_err_socks_e socks_errno;
 		void *payload;
+		int getaddrinfo_errno;
 	};
 } loafers_rc_t;
 
 typedef loafers_rc_t (*loafers_stream_writer_f)( void *, const void *, size_t, ssize_t * );
 typedef loafers_rc_t (*loafers_stream_reader_f)( void *, void *, size_t, ssize_t * );
 typedef loafers_rc_t (*loafers_stream_closer_f)( void * );
+
+typedef loafers_rc_t (*loafers_resolver_f)( const char *, const char *, struct addrinfo ** );
 
 struct _loafers_stream_t;
 typedef struct _loafers_stream_t loafers_stream_t;
@@ -109,7 +113,9 @@ EXPORT loafers_rc_t
 	loafers_write( loafers_stream_t *stream, const void *buf, size_t buflen ),
 	loafers_read( loafers_stream_t *stream, void *buf, size_t buflen, size_t *count );
 
-EXPORT loafers_rc_t loafers_handshake( loafers_conn_t *conn, loafers_stream_t *stream );
+EXPORT loafers_rc_t
+	loafers_handshake( loafers_conn_t *conn, loafers_stream_t *stream ),
+	loafers_udpassociate( loafers_conn_t *conn, loafers_stream_t *stream, loafers_resolver_f resolver, loafers_stream_t **udpstream );
 
 #undef EXPORT
 
