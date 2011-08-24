@@ -198,7 +198,6 @@ loafers_rc_t loafers_conn_alloc( loafers_conn_t **c ) {
 	conn = talloc_ptrtype(NULL, conn);
 	if( conn == NULL ) return loafers_rc_sys();
 	memset(conn, 0, sizeof(*conn));
-	conn->state = LOAFERS_CONN_UNPREPARED;
 	*c = conn;
 	return loafers_rc(LOAFERS_ERR_NOERR);
 }
@@ -262,8 +261,8 @@ loafers_rc_t loafers_set_hostname( loafers_conn_t *conn, const char *hostname, i
 	assert(conn != NULL && hostname != NULL);
 
 	socks_request_t *req = &conn->req;
-	loafers_rc_t rc = loafers_set_atyp(conn, SOCKS_ATYP_HOSTNAME);
-	if( loafers_errno(rc) != LOAFERS_ERR_NOERR ) return rc;
+	loafers_rc_t rc;
+	if( loafers_errno(rc = loafers_set_atyp(conn, SOCKS_ATYP_HOSTNAME)) != LOAFERS_ERR_NOERR ) return rc;
 	req->dst_port = port;
 	size_t buflen = strlen(hostname) + 1;
 	char *buf = talloc_realloc(conn, req->dst_addr.hostname, char, buflen);
@@ -324,11 +323,4 @@ loafers_rc_t loafers_connbuf_alloc( loafers_conn_t *conn, size_t count ) {
 	conn->bufptr = buf;
 	conn->bufremain = bufsiz;
 	return loafers_rc(LOAFERS_ERR_NOERR);
-}
-
-#undef loafers_talloc_name
-void loafers_talloc_name( void *ctx, const char *str ) {
-	assert(ctx != NULL);
-
-	talloc_set_name_const(ctx, str);
 }

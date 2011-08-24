@@ -50,7 +50,7 @@ typedef struct {
 } socks_udp_request_t;
 
 typedef enum {
-	LOAFERS_CONN_UNPREPARED,
+	LOAFERS_CONN_UNPREPARED = 0,
 	LOAFERS_CONN_INVALID,
 
 	LOAFERS_CONN_VERSION_PREPARE,
@@ -99,6 +99,23 @@ struct _loafers_stream_t {
 	size_t wpacketlen;
 	bool udp;
 	socks_udp_request_t udp_req;
+	struct {
+		enum {
+			LOAFERS_WRITE_PURGING = 0,
+			LOAFERS_WRITE_WRITING,
+			LOAFERS_WRITE_FLUSHING
+		} write;
+		enum {
+			LOAFERS_FLUSH_WRITING = 0,
+			LOAFERS_FLUSH_PURGING
+		} flush;
+		enum {
+			LOAFERS_CLOSE_CLOSING = 0,
+			LOAFERS_CLOSE_FREEING,
+			LOAFERS_CLOSE_DONE
+		} close;
+	} state;
+
 	loafers_stream_writer_f write;
 	loafers_stream_reader_f read;
 	loafers_stream_closer_f close;
@@ -113,9 +130,8 @@ loafers_rc_t loafers_stream_write( loafers_stream_t *stream, const void *buf, si
 loafers_rc_t loafers_stream_flush( loafers_stream_t *stream );
 loafers_rc_t loafers_stream_purge( loafers_stream_t *stream );
 
-void loafers_talloc_name( void *ctx, const char *str );
 #define STRINGIFY(x) #x
 #define TOSTRING(x) STRINGIFY(x)
-#define loafers_talloc_name(ctx) loafers_talloc_name(ctx, __FILE__ ":" TOSTRING(__LINE__))
+#define loafers_talloc_name(ctx) talloc_set_name_const(ctx, __FILE__ ":" TOSTRING(__LINE__))
 
 #endif
