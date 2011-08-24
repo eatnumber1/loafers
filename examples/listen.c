@@ -9,6 +9,8 @@
 #include <inttypes.h>
 #include <arpa/inet.h>
 
+#include <talloc.h>
+
 #include <loafers.h>
 
 __attribute__((noreturn))
@@ -163,6 +165,9 @@ int main( int argc, char *argv[] ) {
 		exit(EXIT_FAILURE);
 	}
 
+	talloc_set_log_stderr();
+	talloc_enable_leak_report_full();
+
 	struct addrinfo hints;
 	bzero(&hints, sizeof(struct addrinfo));
 	hints.ai_family = AF_UNSPEC;
@@ -192,7 +197,7 @@ int main( int argc, char *argv[] ) {
 		perror("asprintf");
 		exit(EXIT_FAILURE);
 	}
-	if( loafers_errno(rc = loafers_stream_write(stream, msg, strlen(msg) + 1, NULL)) != LOAFERS_ERR_NOERR ) loafers_die(rc, "loafers_stream_write");
+	if( loafers_errno(rc = loafers_write(stream, msg, strlen(msg) + 1)) != LOAFERS_ERR_NOERR ) loafers_die(rc, "loafers_write");
 	free(msg);
 	free(listen_addr);
 
@@ -208,15 +213,15 @@ int main( int argc, char *argv[] ) {
 	if( loafers_errno(rc = loafers_conn_free(&conn)) != LOAFERS_ERR_NOERR ) loafers_die(rc, "loafers_conn_free");
 
 	static const ssize_t bufsiz = 4096;
-	ssize_t remain;
+	size_t count;
 	char buf[bufsiz + 1];
 	loafers_err_e code;
 	do {
-		code = loafers_errno(rc = loafers_stream_read(listen_stream, buf, bufsiz, &remain));
-		if( code != LOAFERS_ERR_NOERR && code != LOAFERS_ERR_EOF ) loafers_die(rc, "loafers_stream_read");
-		buf[bufsiz - remain + 1] = '\0';
+		code = loafers_errno(rc = loafers_read(listen_stream, buf, bufsiz, &count));
+		if( code != LOAFERS_ERR_NOERR && code != LOAFERS_ERR_EOF ) loafers_die(rc, "loafers_read");
+		buf[count + 1] = '\0';
 		printf("%s", buf);
-	} while( code != LOAFERS_ERR_EOF && remain == bufsiz );
+	} while( code != LOAFERS_ERR_EOF && count == bufsiz );
 
 	freeaddrinfo(res);
 	free(res_str);

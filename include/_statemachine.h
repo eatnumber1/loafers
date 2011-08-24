@@ -6,10 +6,12 @@ static loafers_rc_t loafers_conn_read( loafers_stream_t *stream, loafers_conn_t 
 
 static loafers_rc_t loafers_conn_version_prepare( loafers_conn_t *conn, loafers_stream_t *stream );
 static loafers_rc_t loafers_conn_version_sending( loafers_conn_t *conn, loafers_stream_t *stream );
+static loafers_rc_t loafers_conn_version_flushing( loafers_conn_t *conn, loafers_stream_t *stream );
 static loafers_rc_t loafers_conn_methodsel_prepare( loafers_conn_t *conn, loafers_stream_t *stream );
 static loafers_rc_t loafers_conn_methodsel_reading( loafers_conn_t *conn, loafers_stream_t *stream );
 static loafers_rc_t loafers_conn_request_prepare( loafers_conn_t *conn, loafers_stream_t *stream );
 static loafers_rc_t loafers_conn_request_sending( loafers_conn_t *conn, loafers_stream_t *stream );
+static loafers_rc_t loafers_conn_request_flushing( loafers_conn_t *conn, loafers_stream_t *stream );
 static loafers_rc_t loafers_conn_bind_reply_header_prepare( loafers_conn_t *conn, loafers_stream_t *stream );
 static loafers_rc_t loafers_conn_bind_reply_header_reading( loafers_conn_t *conn, loafers_stream_t *stream );
 static loafers_rc_t loafers_conn_bind_reply_header_hostlen_prepare( loafers_conn_t *conn, loafers_stream_t *stream );

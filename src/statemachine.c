@@ -20,10 +20,12 @@
 static const loafers_state_handler loafers_state_handlers[] = {
 	[LOAFERS_CONN_VERSION_PREPARE] = loafers_conn_version_prepare,
 	[LOAFERS_CONN_VERSION_SENDING] = loafers_conn_version_sending,
+	[LOAFERS_CONN_VERSION_FLUSHING] = loafers_conn_version_flushing,
 	[LOAFERS_CONN_METHODSEL_PREPARE] = loafers_conn_methodsel_prepare,
 	[LOAFERS_CONN_METHODSEL_READING] = loafers_conn_methodsel_reading,
 	[LOAFERS_CONN_REQUEST_PREPARE] = loafers_conn_request_prepare,
 	[LOAFERS_CONN_REQUEST_SENDING] = loafers_conn_request_sending,
+	[LOAFERS_CONN_REQUEST_FLUSHING] = loafers_conn_request_flushing,
 	[LOAFERS_CONN_BIND_REPLY_HEADER_PREPARE] = loafers_conn_bind_reply_header_prepare,
 	[LOAFERS_CONN_BIND_REPLY_HEADER_READING] = loafers_conn_bind_reply_header_reading,
 	[LOAFERS_CONN_BIND_REPLY_HEADER_HOSTLEN_PREPARE] = loafers_conn_bind_reply_header_hostlen_prepare,
@@ -40,18 +42,17 @@ static const loafers_state_handler loafers_state_handlers[] = {
 static const size_t loafers_nostates = sizeof(loafers_state_handlers) / sizeof(loafers_state_handler);
 
 static loafers_rc_t loafers_conn_write( loafers_stream_t *stream, loafers_conn_t *conn ) {
-	ssize_t remain;
-	loafers_rc_t rc = loafers_raw_write(stream, conn->bufptr, conn->bufremain, &remain);
-	conn->bufptr += conn->bufremain - remain;
-	conn->bufremain = remain;
+	loafers_rc_t rc = loafers_stream_write(stream, conn->bufptr, conn->bufremain);
+	conn->bufptr += conn->bufremain;
+	conn->bufremain = 0;
 	return rc;
 }
 
 static loafers_rc_t loafers_conn_read( loafers_stream_t *stream, loafers_conn_t *conn ) {
-	ssize_t remain;
-	loafers_rc_t rc = loafers_raw_read(stream, conn->bufptr, conn->bufremain, &remain);
-	conn->bufptr += conn->bufremain - remain;
-	conn->bufremain = remain;
+	size_t count;
+	loafers_rc_t rc = loafers_stream_read(stream, conn->bufptr, conn->bufremain, &count);
+	conn->bufptr += count;
+	conn->bufremain -= count;
 	return rc;
 }
 
@@ -72,8 +73,16 @@ static loafers_rc_t loafers_conn_version_prepare( loafers_conn_t *conn, loafers_
 static loafers_rc_t loafers_conn_version_sending( loafers_conn_t *conn, loafers_stream_t *stream ) {
 	loafers_rc_t rc;
 	if( loafers_errno(rc = loafers_conn_write(stream, conn)) != LOAFERS_ERR_NOERR ) return rc;
-	conn->state = LOAFERS_CONN_METHODSEL_PREPARE;
+	conn->state = LOAFERS_CONN_VERSION_FLUSHING;
 	return loafers_rc(LOAFERS_ERR_NOERR);
+}
+
+static loafers_rc_t loafers_conn_version_flushing( loafers_conn_t *conn, loafers_stream_t *stream ) {
+	(void) conn;
+	loafers_rc_t rc;
+	if( loafers_errno(rc = loafers_stream_flush(stream)) != LOAFERS_ERR_NOERR ) return rc;
+	conn->state = LOAFERS_CONN_METHODSEL_PREPARE;
+	return loafers_rc(LOAFERS_ERR_NOERR);;
 }
 
 static loafers_rc_t loafers_conn_methodsel_prepare( loafers_conn_t *conn, loafers_stream_t *stream ) {
@@ -133,6 +142,14 @@ static loafers_rc_t loafers_conn_request_prepare( loafers_conn_t *conn, loafers_
 static loafers_rc_t loafers_conn_request_sending( loafers_conn_t *conn, loafers_stream_t *stream ) {
 	loafers_rc_t rc;
 	if( loafers_errno(rc = loafers_conn_write(stream, conn)) != LOAFERS_ERR_NOERR ) return rc;
+	conn->state = LOAFERS_CONN_REQUEST_FLUSHING;
+	return loafers_rc(LOAFERS_ERR_NOERR);
+}
+
+static loafers_rc_t loafers_conn_request_flushing( loafers_conn_t *conn, loafers_stream_t *stream ) {
+	(void) conn;
+	loafers_rc_t rc;
+	if( loafers_errno(rc = loafers_stream_flush(stream)) != LOAFERS_ERR_NOERR ) return rc;
 	conn->state = conn->req.cmd == SOCKS_CMD_BIND ? LOAFERS_CONN_BIND_REPLY_HEADER_PREPARE : LOAFERS_CONN_REPLY_HEADER_PREPARE;
 	return loafers_rc(LOAFERS_ERR_NOERR);
 }

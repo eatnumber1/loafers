@@ -180,7 +180,8 @@ const char *loafers_strerror( loafers_rc_t err ) {
 				[LOAFERS_ERR_BADSTATE] = "Invalid state machine",
 				[LOAFERS_ERR_NOTAVAIL] = "Information not available",
 				[LOAFERS_ERR_UNSPEC] = "Unspecified error",
-				[LOAFERS_ERR_TALLOC] = "Talloc generic error"
+				[LOAFERS_ERR_TALLOC] = "Talloc generic error",
+				[LOAFERS_ERR_NOT_SUPPORTED] = "Operation not supported"
 			};
 			static const size_t noerrors = sizeof(errors) / sizeof(char *);
 			loafers_err_e errnum = loafers_errno(err);
@@ -325,6 +326,9 @@ loafers_rc_t loafers_connbuf_alloc( loafers_conn_t *conn, size_t count ) {
 	return loafers_rc(LOAFERS_ERR_NOERR);
 }
 
-void _loafers_talloc_name( void *ctx, const char *str ) {
-	(void) talloc_set_name_const(ctx, str);
+#undef loafers_talloc_name
+void loafers_talloc_name( void *ctx, const char *str ) {
+	assert(ctx != NULL);
+
+	talloc_set_name_const(ctx, str);
 }

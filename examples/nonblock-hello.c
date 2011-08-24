@@ -9,6 +9,8 @@
 #include <errno.h>
 #include <sys/select.h>
 
+#include <talloc.h>
+
 #include <loafers.h>
 
 __attribute__((noreturn))
@@ -22,6 +24,9 @@ int main( int argc, char *argv[] ) {
 		fprintf(stderr, "Usage: %s shostname sport hostname port\n", argv[0]);
 		exit(EXIT_FAILURE);
 	}
+
+	talloc_set_log_stderr();
+	talloc_enable_leak_report_full();
 
 	struct addrinfo hints;
 	bzero(&hints, sizeof(struct addrinfo));
@@ -100,12 +105,9 @@ int main( int argc, char *argv[] ) {
 
 	const char *hello = "Hello World!\n";
 	const size_t hellolen = strlen(hello);
-	const char *buf = hello;
-	size_t buflen = hellolen + 1;
-	ssize_t remain;
 	do {
 		loafers_err_e code;
-		switch( code = loafers_errno(rc = loafers_stream_write(stream, buf, buflen, &remain)) ) {
+		switch( code = loafers_errno(rc = loafers_write(stream, hello, hellolen)) ) {
 			case LOAFERS_ERR_NOERR:
 				break;
 			case LOAFERS_ERR_NEED_WRITE:
@@ -115,10 +117,8 @@ int main( int argc, char *argv[] ) {
 				}
 				break;
 			default:
-				loafers_die(rc, "loafers_stream_write");
+				loafers_die(rc, "loafers_write");
 		}
-		buf += buflen - remain;
-		buflen = remain;
 	} while( code != LOAFERS_ERR_NOERR );
 	if( loafers_errno(rc = loafers_stream_close(&stream)) != LOAFERS_ERR_NOERR ) loafers_die(rc, "loafers_stream_free");
 	return EXIT_SUCCESS;

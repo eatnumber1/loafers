@@ -8,6 +8,8 @@
 #include <assert.h>
 #include <unistd.h>
 
+#include <talloc.h>
+
 #include <loafers.h>
 
 __attribute__((noreturn))
@@ -21,6 +23,9 @@ int main( int argc, char *argv[] ) {
 		fprintf(stderr, "Usage: %s shostname sport hostname port\n", argv[0]);
 		exit(EXIT_FAILURE);
 	}
+
+	talloc_set_log_stderr();
+	talloc_enable_leak_report_full();
 
 	struct addrinfo hints;
 	bzero(&hints, sizeof(struct addrinfo));
@@ -60,7 +65,7 @@ int main( int argc, char *argv[] ) {
 	if( loafers_errno(rc = loafers_conn_free(&conn)) != LOAFERS_ERR_NOERR ) loafers_die(rc, "loafers_conn_free");
 
 	const char *hello = "Hello World!\n";
-	if( loafers_errno(rc = loafers_stream_write(stream, hello, strlen(hello) + 1, NULL)) != LOAFERS_ERR_NOERR ) loafers_die(rc, "loafers_stream_write");
+	if( loafers_errno(rc = loafers_write(stream, hello, strlen(hello) + 1)) != LOAFERS_ERR_NOERR ) loafers_die(rc, "loafers_write");
 	if( loafers_errno(rc = loafers_stream_close(&stream)) != LOAFERS_ERR_NOERR ) loafers_die(rc, "loafers_stream_free");
 	return EXIT_SUCCESS;
 }

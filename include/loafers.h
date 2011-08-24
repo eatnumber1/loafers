@@ -35,7 +35,8 @@ typedef enum {
 	LOAFERS_ERR_BADSTATE,
 	LOAFERS_ERR_NOTAVAIL,
 	LOAFERS_ERR_UNSPEC,
-	LOAFERS_ERR_TALLOC
+	LOAFERS_ERR_TALLOC,
+	LOAFERS_ERR_NOT_SUPPORTED
 } loafers_err_e;
 
 typedef enum {
@@ -105,8 +106,8 @@ EXPORT loafers_rc_t
 	loafers_stream_FILE_alloc( loafers_stream_t **stream, FILE *file ),
 	loafers_stream_custom_alloc( loafers_stream_t **stream, void *data, loafers_stream_writer_f writer, loafers_stream_reader_f reader, loafers_stream_closer_f closer ),
 	loafers_stream_close( loafers_stream_t **stream ),
-	loafers_stream_write( loafers_stream_t *stream, const void *buf, size_t buflen, ssize_t *remain ),
-	loafers_stream_read( loafers_stream_t *stream, void *buf, size_t buflen, ssize_t *remain );
+	loafers_write( loafers_stream_t *stream, const void *buf, size_t buflen ),
+	loafers_read( loafers_stream_t *stream, void *buf, size_t buflen, size_t *count );
 
 EXPORT loafers_rc_t loafers_handshake( loafers_conn_t *conn, loafers_stream_t *stream );
 

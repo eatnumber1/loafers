@@ -22,7 +22,10 @@ loafers_rc_t loafers_stream_socket_alloc( loafers_stream_t **stream, int sockfd 
 	if( sockptr == NULL ) return loafers_rc_sys();
 	*sockptr = sockfd;
 	loafers_rc_t rc;
-	if( loafers_errno(rc = loafers_stream_custom_alloc(stream, sockptr, loafers_stream_write_socket, loafers_stream_read_socket, loafers_stream_close_socket)) != LOAFERS_ERR_NOERR ) return rc;
+	if( loafers_errno(rc = loafers_stream_custom_alloc(stream, sockptr, loafers_stream_write_socket, loafers_stream_read_socket, loafers_stream_close_socket)) != LOAFERS_ERR_NOERR ) {
+		(void) talloc_free(sockptr);
+		return rc;
+	}
 	(void) talloc_steal(*stream, sockptr);
 	return rc;
 }
@@ -39,6 +42,8 @@ loafers_rc_t loafers_stream_custom_alloc( loafers_stream_t **stream, void *data,
 	loafers_stream_t *s = talloc_ptrtype(NULL, s);
 	if( s == NULL ) return loafers_rc_sys();
 	memset(s, 0, sizeof(*s));
+	// TODO: UDP
+	s->udp = false;
 	s->write = writer;
 	s->read = reader;
 	s->close = closer;
@@ -47,13 +52,14 @@ loafers_rc_t loafers_stream_custom_alloc( loafers_stream_t **stream, void *data,
 	return loafers_rc(LOAFERS_ERR_NOERR);
 }
 
-loafers_rc_t loafers_stream_close( loafers_stream_t **stream ) {
-	assert(stream != NULL);
+loafers_rc_t loafers_stream_close( loafers_stream_t **s ) {
+	assert(s != NULL);
 
+	loafers_stream_t *stream = *s;
 	loafers_rc_t rc;
-	if( loafers_errno(rc = (*stream)->close((*stream)->data)) != LOAFERS_ERR_NOERR ) return rc;
-	if( talloc_free(*stream) == -1 ) return loafers_rc(LOAFERS_ERR_TALLOC);
-	*stream = NULL;
+	if( stream->close != NULL && loafers_errno(rc = stream->close(stream->data)) != LOAFERS_ERR_NOERR ) return rc;
+	if( talloc_free(stream) == -1 ) return loafers_rc(LOAFERS_ERR_TALLOC);
+	*s = NULL;
 	return loafers_rc(LOAFERS_ERR_NOERR);
 }
 
@@ -70,7 +76,7 @@ static loafers_rc_t loafers_stream_write_FILE( void *data, const void *buf, size
 	FILE *f = (FILE *) data;
 	int fd = fileno(f);
 	flockfile(f);
-	// OPTIMIZE: Don't delegate to loafers_stream_write_socket and the fflush can go.
+	// OPTIMIZE: Don't delegate to loafers_write_socket and the fflush can go.
 	fflush(f);
 	loafers_rc_t rc = loafers_stream_write_socket(&fd, buf, buflen, remain);
 	funlockfile(f);
@@ -83,7 +89,7 @@ static loafers_rc_t loafers_stream_read_FILE( void *data, void *buf, size_t bufl
 	FILE *f = (FILE *) data;
 	int fd = fileno(f);
 	flockfile(f);
-	// This can be easily optimized if necessary.
+	// OPTIMIZE: Don't delegate to loafers_write_socket and the fflush can go.
 	fflush(f);
 	loafers_rc_t rc = loafers_stream_read_socket(&fd, buf, buflen, remain);
 	funlockfile(f);
@@ -125,7 +131,7 @@ static loafers_rc_t loafers_stream_write_socket( void *data, const void *buf, si
 	if( remain != NULL ) *remain = bufremain;
 #ifndef NDEBUG
 	if( remain == NULL ) assert(bufremain == 0);
-#endif
+#endif /* NDEBUG */
 	return rc;
 }
 
@@ -159,22 +165,67 @@ static loafers_rc_t loafers_stream_read_socket( void *data, void *buf, size_t bu
 	return rc;
 }
 
-loafers_rc_t loafers_raw_write( loafers_stream_t *stream, const void *buf, size_t buflen, ssize_t *remain ) {
-	return stream->write(stream->data, buf, buflen, remain);
+loafers_rc_t loafers_stream_flush( loafers_stream_t *stream ) {
+	if( stream->write == NULL ) return loafers_rc(LOAFERS_ERR_NOT_SUPPORTED);
+	if( stream->wpacket == NULL ) return loafers_rc(LOAFERS_ERR_NOERR);
+	ssize_t remain;
+	loafers_rc_t rc;
+	do {
+		if( loafers_errno(rc = stream->write(stream->data, stream->wpacketptr, stream->wpacketlen, &remain)) != LOAFERS_ERR_NOERR ) return rc;
+		stream->wpacketptr += stream->wpacketlen - remain;
+		stream->wpacketlen = remain;
+#ifndef NDEBUG
+		// If we didn't get the data out in one shot and we're doing UDP, then we did it wrong.
+		if( stream->udp ) assert(remain == 0);
+#endif /* NDEBUG */
+	} while( remain != 0 );
+	assert(stream->wpacketlen == 0);
+	return loafers_stream_purge(stream);
 }
 
-loafers_rc_t loafers_raw_read( loafers_stream_t *stream, void *buf, size_t buflen, ssize_t *remain ) {
-	return stream->read(stream->data, buf, buflen, remain);
+loafers_rc_t loafers_stream_purge( loafers_stream_t *stream ) {
+	if( stream->wpacket == NULL ) return loafers_rc(LOAFERS_ERR_NOERR);
+	if( talloc_free(stream->wpacket) == -1 ) return loafers_rc(LOAFERS_ERR_TALLOC);
+	stream->wpacket = stream->wpacketptr = NULL;
+	return loafers_rc(LOAFERS_ERR_NOERR);
 }
 
-loafers_rc_t loafers_stream_write( loafers_stream_t *stream, const void *buf, size_t buflen, ssize_t *remain ) {
+loafers_rc_t loafers_stream_write( loafers_stream_t *stream, const void *buf, size_t buflen ) {
+	if( stream->write == NULL ) return loafers_rc(LOAFERS_ERR_NOT_SUPPORTED);
+	size_t wpacketlen = buflen + stream->wpacketlen;
+	void *wpacket = talloc_realloc(stream, stream->wpacket, void, wpacketlen);
+	if( wpacket == NULL ) return loafers_rc_sys();
+	loafers_talloc_name(wpacket);
+	stream->wpacket = stream->wpacketptr = wpacket;
+	wpacket += stream->wpacketlen;
+	memcpy(wpacket, buf, buflen);
+	stream->wpacketlen = wpacketlen;
+	return loafers_rc(LOAFERS_ERR_NOERR);
+}
+
+loafers_rc_t loafers_stream_read( loafers_stream_t *stream, void *buf, size_t buflen, size_t *count ) {
+	ssize_t remain = buflen;
+	loafers_rc_t rc = stream->read(stream->data, buf, buflen, &remain);
+	assert(remain >= 0);
+	if( count != NULL ) *count = buflen - remain;
+#ifndef NDEBUG
+	if( count == NULL ) assert(remain == 0);
+#endif /* NDEBUG */
+	return rc;
+}
+
+loafers_rc_t loafers_write( loafers_stream_t *stream, const void *buf, size_t buflen ) {
 	assert(stream != NULL);
 
-	return loafers_raw_write(stream, buf, buflen, remain);
+	loafers_rc_t rc;
+	if( loafers_errno(rc = loafers_stream_purge(stream)) != LOAFERS_ERR_NOERR ) return rc;
+	if( loafers_errno(rc = loafers_stream_write(stream, buf, buflen)) != LOAFERS_ERR_NOERR ) return rc;
+	if( loafers_errno(rc = loafers_stream_flush(stream)) != LOAFERS_ERR_NOERR ) return rc;
+	return loafers_rc(LOAFERS_ERR_NOERR);
 }
 
-loafers_rc_t loafers_stream_read( loafers_stream_t *stream, void *buf, size_t buflen, ssize_t *remain ) {
+loafers_rc_t loafers_read( loafers_stream_t *stream, void *buf, size_t buflen, size_t *count ) {
 	assert(stream != NULL);
 
-	return loafers_raw_read(stream, buf, buflen, remain);
+	return loafers_stream_read(stream, buf, buflen, count);
 }
