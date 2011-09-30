@@ -64,17 +64,22 @@ typedef struct {
 	};
 } loafers_rc_t;
 
-typedef loafers_rc_t (*loafers_stream_writer_f)( void *, const void *, size_t, ssize_t * );
-typedef loafers_rc_t (*loafers_stream_reader_f)( void *, void *, size_t, ssize_t * );
-typedef loafers_rc_t (*loafers_stream_closer_f)( void * );
-
-typedef loafers_rc_t (*loafers_resolver_f)( const char *, const char *, struct addrinfo ** );
-
 struct _loafers_stream_t;
 typedef struct _loafers_stream_t loafers_stream_t;
 
 struct _loafers_conn_t;
 typedef struct _loafers_conn_t loafers_conn_t;
+
+typedef loafers_rc_t (*loafers_stream_writer_f)( void *, const void *, size_t, ssize_t * );
+typedef loafers_rc_t (*loafers_stream_reader_f)( void *, void *, size_t, ssize_t * );
+typedef loafers_rc_t (*loafers_stream_closer_f)( void * );
+
+typedef struct {
+	loafers_rc_t rc;
+	void *data;
+} loafers_retval_t;
+typedef loafers_retval_t (*loafers_stream_generator_f)( void *, const char *, const char *, const struct addrinfo *, loafers_stream_t ** );
+typedef loafers_rc_t (*loafers_stream_destroyer_f)( void *, loafers_stream_t * );
 
 #define EXPORT __attribute__((visibility("default")))
 
@@ -85,8 +90,8 @@ EXPORT loafers_rc_t
 	loafers_rc( loafers_err_e err ),
 	loafers_rc_sys();
 
-EXPORT void loafers_set_rc_payload( loafers_rc_t rc, void *payload );
-EXPORT void *loafers_get_rc_payload( loafers_rc_t rc );
+EXPORT loafers_rc_t loafers_set_rc_payload( loafers_rc_t rc, void *payload );
+EXPORT loafers_retval_t loafers_get_rc_payload( loafers_rc_t rc );
 
 EXPORT const char *loafers_strerror( loafers_rc_t err );
 
@@ -98,12 +103,18 @@ EXPORT loafers_rc_t
 	loafers_set_command( loafers_conn_t *conn, socks_cmd_e cmd ),
 	loafers_set_hostname( loafers_conn_t *conn, const char *hostname, in_port_t port ),
 	loafers_set_sockaddr( loafers_conn_t *conn, const struct sockaddr *address ),
+	loafers_set_proxy( loafers_conn_t *conn, const char *hostname, const char *servname, const struct addrinfo *hints ),
+	loafers_set_stream_generator( loafers_conn_t *conn, loafers_stream_generator_f creator, loafers_stream_destroyer_f destroyer ),
+	loafers_get_relay_addr( loafers_conn_t *conn, char **addr ),
+	loafers_get_relay_port( loafers_conn_t *conn, in_port_t *port ),
 	loafers_get_external_addr( loafers_conn_t *conn, char **addr ),
 	loafers_get_external_port( loafers_conn_t *conn, in_port_t *port ),
 	loafers_get_remote_addr( loafers_conn_t *conn, char **addr ),
 	loafers_get_remote_port( loafers_conn_t *conn, in_port_t *port ),
 	loafers_get_listen_addr( loafers_conn_t *conn, char **addr ),
 	loafers_get_listen_port( loafers_conn_t *conn, in_port_t *port );
+
+EXPORT loafers_retval_t loafers_get_generator_data( loafers_stream_t *stream );
 
 EXPORT loafers_rc_t
 	loafers_stream_socket_alloc( loafers_stream_t **stream, int sockfd ),
@@ -113,9 +124,7 @@ EXPORT loafers_rc_t
 	loafers_write( loafers_stream_t *stream, const void *buf, size_t buflen ),
 	loafers_read( loafers_stream_t *stream, void *buf, size_t buflen, size_t *count );
 
-EXPORT loafers_rc_t
-	loafers_handshake( loafers_conn_t *conn, loafers_stream_t *stream ),
-	loafers_udpassociate( loafers_conn_t *conn, loafers_stream_t *stream, loafers_resolver_f resolver, loafers_stream_t **udpstream );
+EXPORT loafers_rc_t loafers_connect( loafers_conn_t *conn, loafers_stream_t *control, loafers_stream_t *data );
 
 #undef EXPORT
 

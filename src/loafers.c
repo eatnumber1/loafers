@@ -21,6 +21,22 @@
 #include "_common.h"
 #include "_loafers.h"
 
+loafers_rc_t *loafers_get_global_rc_ptr() {
+	static TLS loafers_rc_t rc = {
+		.code = LOAFERS_ERR_NOERR
+	};
+	return &rc;
+}
+
+loafers_rc_t loafers_rc_talloc() {
+	loafers_rc_t rc;
+	if( loafers_errno(rc = loafers_global_rc) != LOAFERS_ERR_NOERR ) {
+		return rc;
+	} else {
+		return loafers_rc(LOAFERS_ERR_TALLOC);
+	}
+}
+
 loafers_err_e loafers_errno( loafers_rc_t err ) {
 	return err.code;
 }
@@ -48,16 +64,20 @@ loafers_rc_t loafers_rc_sys() {
 	return ret;
 }
 
-void loafers_set_rc_payload( loafers_rc_t rc, void *payload ) {
+loafers_rc_t loafers_set_rc_payload( loafers_rc_t rc, void *payload ) {
 	assert(loafers_errno(rc) == LOAFERS_ERR_UNSPEC);
 
 	rc.payload = payload;
+	return loafers_rc(LOAFERS_ERR_NOERR);
 }
 
-void *loafers_get_rc_payload( loafers_rc_t rc ) {
+loafers_retval_t loafers_get_rc_payload( loafers_rc_t rc ) {
 	assert(loafers_errno(rc) == LOAFERS_ERR_UNSPEC);
 
-	return rc.payload;
+	return (loafers_retval_t) {
+		.data = rc.payload,
+		.rc = loafers_rc(LOAFERS_ERR_NOERR)
+	};
 }
 
 static loafers_rc_t loafers_get_generic_addr( loafers_conn_t *conn, char **addr, socks_reply_t *reply, bool *avail_flag ) {
@@ -215,6 +235,16 @@ loafers_rc_t loafers_conn_alloc( loafers_conn_t **c ) {
 	conn = talloc_ptrtype(NULL, conn);
 	if( conn == NULL ) return loafers_rc_sys();
 	memset(conn, 0, sizeof(*conn));
+	loafers_stream_generator_t *generator = talloc_ptrtype(conn, generator);
+	if( generator == NULL ) {
+		loafers_rc_t rc = loafers_rc_sys();
+		(void) talloc_free(conn);
+		return rc;
+	}
+	memset(generator, 0, sizeof(*generator));
+	generator->create = loafers_stream_generator_default;
+	generator->destroy = loafers_stream_destroyer_default;
+	conn->generator = generator;
 	*c = conn;
 	return loafers_rc(LOAFERS_ERR_NOERR);
 }
@@ -222,7 +252,7 @@ loafers_rc_t loafers_conn_alloc( loafers_conn_t **c ) {
 loafers_rc_t loafers_conn_free( loafers_conn_t **conn ) {
 	assert(conn != NULL && *conn != NULL);
 
-	if( talloc_free(*conn) == -1 ) return loafers_rc(LOAFERS_ERR_TALLOC);
+	if( talloc_free(*conn) == -1 ) return loafers_rc_talloc();
 	return loafers_rc(LOAFERS_ERR_NOERR);
 }
 
@@ -231,8 +261,12 @@ static void loafers_set_prepared( loafers_conn_t *conn ) {
 			conn->req.ver != SOCKS_VERSION_UNINIT &&
 			conn->ver.nmethods != 0 &&
 			conn->req.cmd != SOCKS_CMD_UNINIT &&
-			conn->req.atyp != SOCKS_ATYP_UNINIT )
-		conn->state = LOAFERS_CONN_VERSION_PREPARE;
+			conn->req.atyp != SOCKS_ATYP_UNINIT &&
+			conn->proxy.hints != NULL && (
+				conn->proxy.hostname != NULL ||
+				conn->proxy.servname != NULL )
+			)
+		conn->state = LOAFERS_CONN_GENERATE_STREAM;
 }
 
 loafers_rc_t loafers_set_version( loafers_conn_t *conn, socks_version_e version ) {
@@ -342,24 +376,68 @@ loafers_rc_t loafers_connbuf_alloc( loafers_conn_t *conn, size_t count ) {
 	return loafers_rc(LOAFERS_ERR_NOERR);
 }
 
-loafers_rc_t loafers_getaddrinfo_resolver( const char *hostname, const char *servname, struct addrinfo **res ) {
-	struct addrinfo hints;
-	memset(&hints, 0, sizeof(struct addrinfo));
-	hints.ai_family = AF_UNSPEC;
-	hints.ai_socktype = SOCK_DGRAM;
-	hints.ai_protocol = IPPROTO_UDP;
-	int retcode;
-	if( (retcode = getaddrinfo(hostname, servname, &hints, res)) != 0 ) {
-		loafers_rc_t ret = loafers_rc(LOAFERS_ERR_GETADDRINFO);
-		ret.getaddrinfo_errno = retcode;
-		return ret;
+loafers_rc_t loafers_set_proxy( loafers_conn_t *conn, const char *host, const char *serv, const struct addrinfo *hints ) {
+	assert(conn != NULL && hints != NULL);
+
+	TALLOC_CTX *ctx = talloc_new(conn);
+	if( ctx == NULL ) return loafers_rc_sys();
+	char *hostname = talloc_strdup(ctx, host);
+	if( hostname == NULL ) {
+		(void) talloc_free(ctx);
+		return loafers_rc_sys();
 	}
+	char *servname = talloc_strdup(ctx, serv);
+	if( servname == NULL ) {
+		(void) talloc_free(ctx);
+		return loafers_rc_sys();
+	}
+	int count = 0;
+	for( const struct addrinfo *res = hints; res != NULL; res = res->ai_next ) count++;
+	struct addrinfo head;
+	struct addrinfo *last = &head;
+	for( const struct addrinfo *res = hints; res != NULL; res = res->ai_next ) {
+		struct addrinfo *cur = talloc_ptrtype(ctx, cur);
+		if( cur == NULL ) {
+			(void) talloc_free(ctx);
+			return loafers_rc_sys();
+		}
+		memcpy(cur, res, sizeof(struct addrinfo));
+		if( res->ai_addr != NULL ) {
+			cur->ai_addr = talloc_size(ctx, res->ai_addrlen);
+			if( cur->ai_addr == NULL ) {
+				(void) talloc_free(ctx);
+				return loafers_rc_sys();
+			}
+			memcpy(cur->ai_addr, res->ai_addr, res->ai_addrlen);
+		}
+		if( res->ai_canonname != NULL ) {
+			cur->ai_canonname = talloc_strdup(ctx, res->ai_canonname);
+			if( cur->ai_canonname == NULL ) {
+				(void) talloc_free(ctx);
+				return loafers_rc_sys();
+			}
+		}
+		last->ai_next = cur;
+		last = cur;
+	}
+	conn->proxy.hostname = hostname;
+	conn->proxy.servname = servname;
+	conn->proxy.hints = head.ai_next;
+	loafers_set_prepared(conn);
 	return loafers_rc(LOAFERS_ERR_NOERR);
 }
 
-int loafers_resolve_addrinfo_free( struct addrinfo **addr ) {
-	assert(addr != NULL);
+loafers_rc_t loafers_set_stream_generator( loafers_conn_t *conn, loafers_stream_generator_f creator, loafers_stream_destroyer_f destroyer ) {
+	assert(conn != NULL && creator != NULL);
 
-	freeaddrinfo(*addr);
-	return 0;
+	conn->generator->create = creator;
+	conn->generator->destroy = destroyer;
+	return loafers_rc(LOAFERS_ERR_NOERR);
+}
+
+loafers_retval_t loafers_get_generator_data( loafers_stream_t *stream ) {
+	return (loafers_retval_t) {
+		.data = stream->generator->data,
+		.rc = loafers_rc(LOAFERS_ERR_NOERR)
+	};
 }

@@ -98,7 +98,7 @@ static loafers_stream_t *listen_connect( char *argv[] ) {
 	loafers_stream_t *stream = make_stream(sock);
 	loafers_conn_t *conn = make_conn(SOCKS_CMD_CONNECT, argv[3], argv[4]);
 	loafers_rc_t rc;
-	if( loafers_errno(rc = loafers_handshake(conn, stream)) != LOAFERS_ERR_NOERR ) loafers_die(rc, "loafers_handshake");
+	if( loafers_errno(rc = loafers_connect(conn, &stream)) != LOAFERS_ERR_NOERR ) loafers_die(rc, "loafers_connect");
 
 	char *external_addr;
 	in_port_t external_port;
@@ -112,7 +112,7 @@ static loafers_stream_t *listen_connect( char *argv[] ) {
 	return stream;
 }
 
-static loafers_stream_t *listen_bind( char *argv[], loafers_conn_t **connptr ) {
+static loafers_stream_t *listen_bind( char *argv[] ) {
 	struct addrinfo hints;
 	bzero(&hints, sizeof(struct addrinfo));
 	hints.ai_family = res->ai_family;
@@ -149,12 +149,10 @@ static loafers_stream_t *listen_bind( char *argv[], loafers_conn_t **connptr ) {
 		exit(EXIT_FAILURE);
 	}
 
-	assert(connptr != NULL);
-	*connptr = make_conn(SOCKS_CMD_BIND, argv[3], argv[5]);
-	loafers_conn_t *conn = *connptr;
+	loafers_conn_t *conn = make_conn(SOCKS_CMD_BIND, argv[3], argv[5]);
 	loafers_stream_t *stream = make_stream(sock);
 	loafers_rc_t rc;
-	if( loafers_errno(rc = loafers_handshake(conn, stream)) != LOAFERS_ERR_NOERR_BINDWAIT ) loafers_die(rc, "loafers_handshake");
+	if( loafers_errno(rc = loafers_connect(conn, &stream)) != LOAFERS_ERR_NOERR_BINDWAIT ) loafers_die(rc, "loafers_connect");
 
 	return stream;
 }
@@ -181,10 +179,9 @@ int main( int argc, char *argv[] ) {
 	res_str = addrinfo_to_str(res);
 
 
-	loafers_conn_t *conn;
+	loafers_conn_t *conn = listen_bind(argv);
 	loafers_rc_t rc;
-	loafers_stream_t *stream = listen_connect(argv),
-		*listen_stream = listen_bind(argv, &conn);
+	loafers_stream_t *stream, *listen_stream;
 	char *listen_addr;
 	in_port_t listen_port;
 
@@ -201,7 +198,7 @@ int main( int argc, char *argv[] ) {
 	free(msg);
 	free(listen_addr);
 
-	if( loafers_errno(rc = loafers_handshake(conn, listen_stream)) != LOAFERS_ERR_NOERR ) loafers_die(rc, "loafers_handshake");
+	if( loafers_errno(rc = loafers_connect(conn, &listen_stream)) != LOAFERS_ERR_NOERR ) loafers_die(rc, "loafers_connect");
 
 	char *remote_addr;
 	in_port_t remote_port;

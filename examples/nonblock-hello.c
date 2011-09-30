@@ -8,6 +8,8 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <sys/select.h>
+#include <unistd.h>
+#include <assert.h>
 
 #include <talloc.h>
 
@@ -17,6 +19,80 @@ __attribute__((noreturn))
 static void loafers_die( loafers_rc_t rc, const char *s ) {
 	fprintf(stderr, "%s: %s\n", s, loafers_strerror(rc));
 	exit(EXIT_FAILURE);
+}
+
+static loafers_rc_t stream_destroy( void *data, loafers_stream_t *stream ) {
+	(void) stream;
+	free(data);
+	return loafers_rc(LOAFERS_ERR_NOERR);
+}
+
+static loafers_retval_t stream_gen( void *data, const char *hostname, const char *servname, const struct addrinfo *hints, loafers_stream_t **stream ) {
+	assert(data == NULL);
+	loafers_retval_t retval = {
+		.rc = loafers_rc(LOAFERS_ERR_NOERR),
+		.data = data
+	};
+	int *sockptr = (int *) data;
+	if( data == NULL ) {
+		sockptr = malloc(sizeof(int));
+		if( sockptr == NULL ) {
+			retval.rc = loafers_rc_sys();
+			return retval;
+		}
+	}
+	retval.data = sockptr;
+	struct addrinfo *r;
+	int retcode = getaddrinfo(hostname, servname, hints, &r);
+	if( retcode != 0 ) {
+		retval.rc = loafers_rc(LOAFERS_ERR_GETADDRINFO);
+		retval.rc.getaddrinfo_errno = retcode;
+		free(sockptr);
+		retval.data = NULL;
+		return retval;
+	}
+	int sock;
+	retval.rc = loafers_rc(LOAFERS_ERR_NOERR);
+	for( struct addrinfo *res = r; res != NULL; res = res->ai_next ) {
+		if( (sock = socket(res->ai_family, res->ai_socktype, res->ai_protocol)) == -1 ) {
+			retval.rc = loafers_rc_sys();
+			continue;
+		}
+		if( connect(sock, res->ai_addr, res->ai_addrlen) != 0 ) {
+			retval.rc = loafers_rc_sys();
+			close(sock);
+			continue;
+		}
+		break;
+	}
+	freeaddrinfo(r);
+	if( loafers_errno(retval.rc) != LOAFERS_ERR_NOERR ) {
+		free(sockptr);
+		retval.data = NULL;
+		return retval;
+	}
+	int flags = fcntl(sock, F_GETFL);
+	if( flags == -1 ) {
+		retval.rc = loafers_rc_sys();
+		free(sockptr);
+		retval.data = NULL;
+		return retval;
+	}
+	if( fcntl(sock, F_SETFL, flags | O_NONBLOCK) == -1 ) {
+		retval.rc = loafers_rc_sys();
+		free(sockptr);
+		retval.data = NULL;
+		return retval;
+	}
+	if( loafers_errno(retval.rc = loafers_stream_socket_alloc(stream, sock)) != LOAFERS_ERR_NOERR ) {
+		close(sock);
+		free(sockptr);
+		retval.data = NULL;
+		return retval;
+	}
+	*sockptr = sock;
+	retval.rc = loafers_rc(LOAFERS_ERR_NOERR);
+	return retval;
 }
 
 int main( int argc, char *argv[] ) {
@@ -33,35 +109,6 @@ int main( int argc, char *argv[] ) {
 	hints.ai_family = AF_UNSPEC;
 	hints.ai_socktype = SOCK_STREAM;
 	hints.ai_protocol = IPPROTO_TCP;
-	struct addrinfo *res;
-	int retcode = getaddrinfo(argv[1], argv[2], &hints, &res);
-	if( retcode != 0 ) {
-		fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(retcode));
-		exit(EXIT_FAILURE);
-	}
-
-	int sock = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
-	if( sock == -1 ) {
-		perror("socket");
-		exit(EXIT_FAILURE);
-	}
-
-	if( connect(sock, res->ai_addr, res->ai_addrlen) != 0 ) {
-		perror("connect");
-		exit(EXIT_FAILURE);
-	}
-	freeaddrinfo(res);
-
-	int flags = fcntl(sock, F_GETFL);
-	if( flags == -1 ) {
-		perror("fcntl");
-		exit(EXIT_FAILURE);
-	}
-
-	if( fcntl(sock, F_SETFL, flags | O_NONBLOCK) == -1 ) {
-		perror("fcntl");
-		exit(EXIT_FAILURE);
-	}
 
 	loafers_conn_t *conn;
 	loafers_stream_t *stream;
@@ -72,16 +119,35 @@ int main( int argc, char *argv[] ) {
 	if( loafers_errno(rc = loafers_set_methods(conn, 1, methods)) != LOAFERS_ERR_NOERR ) loafers_die(rc, "loafers_set_methods");
 	if( loafers_errno(rc = loafers_set_command(conn, SOCKS_CMD_CONNECT)) != LOAFERS_ERR_NOERR ) loafers_die(rc, "loafers_set_command");
 	if( loafers_errno(rc = loafers_set_hostname(conn, argv[3], htons(atoi(argv[4])))) != LOAFERS_ERR_NOERR ) loafers_die(rc, "loafers_set_hostname");
-	if( loafers_errno(rc = loafers_stream_socket_alloc(&stream, sock)) != LOAFERS_ERR_NOERR ) loafers_die(rc, "loafers_stream_socket_alloc");
+	if( loafers_errno(rc = loafers_set_proxy(conn, argv[1], argv[2], &hints)) != LOAFERS_ERR_NOERR ) loafers_die(rc, "loafers_set_proxy");
+	if( loafers_errno(rc = loafers_set_stream_generator(conn, stream_gen, stream_destroy)) != LOAFERS_ERR_NOERR ) loafers_die(rc, "loafers_set_stream_generator");
 
 	fd_set rfds, wfds;
 	FD_ZERO(&rfds);
 	FD_ZERO(&wfds);
-	FD_SET(sock, &rfds);
-	FD_SET(sock, &wfds);
 	loafers_err_e code;
+	int sock;
+	int *sockptr = NULL;
 	do {
-		switch( code = loafers_errno(rc = loafers_handshake(conn, stream)) ) {
+		code = loafers_errno(rc = loafers_connect(conn, &stream));
+		if( sockptr == NULL ) {
+			switch( code = loafers_errno(rc) ) {
+				case LOAFERS_ERR_NOERR:
+				case LOAFERS_ERR_NEED_WRITE:
+				case LOAFERS_ERR_NEED_READ: {
+					loafers_retval_t retval;
+					if( loafers_errno((retval = loafers_get_generator_data(stream)).rc) != LOAFERS_ERR_NOERR ) loafers_die(retval.rc, "loafers_get_generator_data");
+					sockptr = (int *) retval.data;
+					sock = *sockptr;
+					FD_SET(sock, &rfds);
+					FD_SET(sock, &wfds);
+					break;
+				}
+				default:
+					loafers_die(rc, "loafers_connect");
+			}
+		}
+		switch( code = loafers_errno(rc) ) {
 			case LOAFERS_ERR_NOERR:
 				break;
 			case LOAFERS_ERR_NEED_WRITE:
@@ -97,7 +163,7 @@ int main( int argc, char *argv[] ) {
 				}
 				break;
 			default:
-				loafers_die(rc, "loafers_handshake");
+				loafers_die(rc, "loafers_connect");
 		}
 	} while( code != LOAFERS_ERR_NOERR );
 

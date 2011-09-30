@@ -18,6 +18,22 @@
 #include "_common.h"
 #include "_stream.h"
 
+static int loafers_stream_destructor( loafers_stream_t *stream ) {
+	assert(stream != NULL);
+
+	loafers_rc_t rc;
+	if( close != NULL && loafers_errno(rc = stream->close(stream->data)) != LOAFERS_ERR_NOERR ) {
+		loafers_global_rc = rc;
+		return false;
+	}
+	assert(stream->generator != NULL);
+	if( stream->generator->destroy != NULL && loafers_errno(rc = stream->generator->destroy(stream->generator->data, stream)) != LOAFERS_ERR_NOERR ) {
+		loafers_global_rc = rc;
+		return false;
+	}
+	return true;
+}
+
 loafers_rc_t loafers_stream_socket_alloc( loafers_stream_t **stream, int sockfd ) {
 	assert(stream != NULL);
 
@@ -46,8 +62,9 @@ loafers_rc_t loafers_stream_custom_alloc( loafers_stream_t **stream, void *data,
 	loafers_stream_t *s = talloc_ptrtype(NULL, s);
 	if( s == NULL ) return loafers_rc_sys();
 	memset(s, 0, sizeof(*s));
+	talloc_set_destructor(s, loafers_stream_destructor);
 	// TODO: UDP
-	s->udp = false;
+	s->udp.enabled = false;
 	s->write = writer;
 	s->read = reader;
 	s->close = closer;
@@ -60,22 +77,7 @@ loafers_rc_t loafers_stream_close( loafers_stream_t **s ) {
 	assert(s != NULL);
 
 	loafers_stream_t *stream = *s;
-	loafers_rc_t rc;
-	while( stream->state.close != LOAFERS_CLOSE_DONE ) {
-		switch( stream->state.close ) {
-			case LOAFERS_CLOSE_CLOSING:
-				if( stream->close != NULL && loafers_errno(rc = stream->close(stream->data)) != LOAFERS_ERR_NOERR ) return rc;
-				stream->state.close = LOAFERS_CLOSE_FREEING;
-			case LOAFERS_CLOSE_FREEING:
-				if( talloc_free(stream) == -1 ) return loafers_rc(LOAFERS_ERR_TALLOC);
-				stream->state.close = LOAFERS_CLOSE_DONE;
-				break;
-			default:
-				assert(false);
-				errno = EINVAL;
-				return loafers_rc_sys();
-		}
-	}
+	if( talloc_free(stream) == -1 ) return loafers_rc_talloc();
 	*s = NULL;
 	return loafers_rc(LOAFERS_ERR_NOERR);
 }
@@ -190,6 +192,8 @@ loafers_rc_t loafers_stream_flush( loafers_stream_t *stream ) {
 	do {
 		loafers_rc_t rc;
 		switch( stream->state.flush ) {
+			case LOAFERS_FLUSH_INACTIVE:
+				stream->state.flush = LOAFERS_FLUSH_INACTIVE;
 			case LOAFERS_FLUSH_WRITING: {
 				ssize_t remain;
 				do {
@@ -198,7 +202,7 @@ loafers_rc_t loafers_stream_flush( loafers_stream_t *stream ) {
 					stream->wpacketlen = remain;
 #ifndef NDEBUG
 					// If we didn't get the data out in one shot and we're doing UDP, then we did it wrong.
-					if( stream->udp ) assert(remain == 0);
+					if( stream->udp.enabled ) assert(remain == 0);
 #endif /* NDEBUG */
 				} while( remain != 0 );
 				assert(stream->wpacketlen == 0);
@@ -206,20 +210,20 @@ loafers_rc_t loafers_stream_flush( loafers_stream_t *stream ) {
 			}
 			case LOAFERS_FLUSH_PURGING:
 				if( loafers_errno(rc = loafers_stream_purge(stream)) != LOAFERS_ERR_NOERR ) return rc;
-				stream->state.flush = LOAFERS_FLUSH_WRITING;
+				stream->state.flush = LOAFERS_FLUSH_INACTIVE;
 				break;
 			default:
 				assert(false);
 				errno = EINVAL;
 				return loafers_rc_sys();
 		}
-	} while( stream->state.flush != LOAFERS_FLUSH_WRITING );
+	} while( stream->state.flush != LOAFERS_FLUSH_INACTIVE );
 	return loafers_rc(LOAFERS_ERR_NOERR);
 }
 
 loafers_rc_t loafers_stream_purge( loafers_stream_t *stream ) {
 	if( stream->wpacket == NULL ) return loafers_rc(LOAFERS_ERR_NOERR);
-	if( talloc_free(stream->wpacket) == -1 ) return loafers_rc(LOAFERS_ERR_TALLOC);
+	if( talloc_free(stream->wpacket) == -1 ) return loafers_rc_talloc();
 	stream->wpacket = stream->wpacketptr = NULL;
 	return loafers_rc(LOAFERS_ERR_NOERR);
 }
@@ -255,6 +259,8 @@ loafers_rc_t loafers_write( loafers_stream_t *stream, const void *buf, size_t bu
 	loafers_rc_t rc;
 	do {
 		switch( stream->state.write ) {
+			case LOAFERS_WRITE_INACTIVE:
+				stream->state.write = LOAFERS_WRITE_PURGING;
 			case LOAFERS_WRITE_PURGING:
 				if( loafers_errno(rc = loafers_stream_purge(stream)) != LOAFERS_ERR_NOERR ) return rc;
 				stream->state.write = LOAFERS_WRITE_WRITING;
@@ -263,14 +269,14 @@ loafers_rc_t loafers_write( loafers_stream_t *stream, const void *buf, size_t bu
 				stream->state.write = LOAFERS_WRITE_FLUSHING;
 			case LOAFERS_WRITE_FLUSHING:
 				if( loafers_errno(rc = loafers_stream_flush(stream)) != LOAFERS_ERR_NOERR ) return rc;
-				stream->state.write = LOAFERS_WRITE_PURGING;
+				stream->state.write = LOAFERS_WRITE_INACTIVE;
 				break;
 			default:
 				assert(false);
 				errno = EINVAL;
 				return loafers_rc_sys();
 		}
-	} while( stream->state.write != LOAFERS_WRITE_PURGING );
+	} while( stream->state.write != LOAFERS_WRITE_INACTIVE );
 	return loafers_rc(LOAFERS_ERR_NOERR);
 }
 
