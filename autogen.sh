@@ -8,16 +8,13 @@ if [[ "$(uname -s)" == "Darwin" ]]; then
 		glibtoolize "$@"
 	}
 
-	if [[ -x ${commands[brew]} ]]; then
-		function aclocal {
-			local pkg_config_prefix="$(brew --prefix pkg-config)"
-			typeset -a args
-			if [[ -d "$pkg_config_prefix" ]]; then
-				args=( -I "$pkg_config_prefix/share/aclocal" )
-			fi
-			command aclocal "$args[@]" "$@"
-		}
-	fi
+	function aclocal {
+		typeset -a args
+		if [[ -d "/usr/local/share/aclocal" ]]; then
+			args=( -I "/usr/local/share/aclocal" )
+		fi
+		command aclocal "$@" "$args[@]"
+	}
 fi
 
 libtoolize -i

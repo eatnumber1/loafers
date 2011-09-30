@@ -18,7 +18,6 @@ depcomp
 install-sh
 libtool
 ltmain.sh
-m4/
 missing
 loafers.pc
 stamp-h1
@@ -27,3 +26,5 @@ libloafers.la
 *.lo
 *.dSYM/
 config.cache
+.*.swo
+cscope.*

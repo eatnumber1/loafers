@@ -1,6 +1,6 @@
 ACLOCAL_AMFLAGS = -I m4
 
-CFLAGS += -std=gnu99 -Wall -Werror -Wextra
+CFLAGS += -Wall -Werror -Wextra
 
 lib_LTLIBRARIES = libloafers.la
 libloafers_la_SOURCES = src/loafers.c src/statemachine.c src/stream.c
